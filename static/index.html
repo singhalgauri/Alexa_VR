@@ -1,0 +1,1279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Voice Gate for Alexa+ | Speaker-Verified AI Assistant</title>
+<meta name="description" content="A simulated Alexa+ experience with a speaker-recognition layer. Only enrolled voices may access the AI assistant, protected by a real MCP server.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  /* =========================================================
+     Design Tokens
+  ========================================================= */
+  :root {
+    --bg-deep:      #050810;
+    --bg-surface:   #0b0f1a;
+    --bg-card:      #111827;
+    --bg-card2:     #1a2035;
+    --border:       rgba(99,102,241,0.18);
+    --border-hi:    rgba(99,102,241,0.45);
+    --text-primary: #f0f4ff;
+    --text-muted:   #8892aa;
+    --text-dim:     #4a5568;
+    --accent-blue:  #6366f1;
+    --accent-cyan:  #22d3ee;
+    --accent-green: #10b981;
+    --accent-red:   #f43f5e;
+    --accent-amber: #f59e0b;
+    --orb-idle:     radial-gradient(circle at 38% 38%, #3b82f6 0%, #6366f1 50%, #1e3a5f 100%);
+    --orb-listen:   radial-gradient(circle at 38% 38%, #22d3ee 0%, #3b82f6 55%, #1a2a4a 100%);
+    --orb-verify:   radial-gradient(circle at 38% 38%, #f59e0b 0%, #f97316 55%, #3a1a00 100%);
+    --orb-granted:  radial-gradient(circle at 38% 38%, #10b981 0%, #059669 55%, #003a28 100%);
+    --orb-denied:   radial-gradient(circle at 38% 38%, #f43f5e 0%, #be123c 55%, #3a0010 100%);
+    --shadow-glow:  0 0 60px rgba(99,102,241,0.25);
+    --radius:       16px;
+    --mono:         'JetBrains Mono', monospace;
+  }
+
+  /* =========================================================
+     Base Reset
+  ========================================================= */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: 'Inter', sans-serif;
+    background: var(--bg-deep);
+    color: var(--text-primary);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* animated mesh background */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background:
+      radial-gradient(ellipse 80% 50% at 20% 20%, rgba(99,102,241,0.08) 0%, transparent 60%),
+      radial-gradient(ellipse 60% 40% at 80% 80%, rgba(34,211,238,0.06) 0%, transparent 60%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* =========================================================
+     Layout
+  ========================================================= */
+  .app-grid {
+    position: relative; z-index: 1;
+    display: grid;
+    grid-template-columns: 1fr 380px;
+    grid-template-rows: auto 1fr;
+    gap: 0;
+    min-height: 100vh;
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  @media (max-width: 900px) {
+    .app-grid { grid-template-columns: 1fr; padding: 0 12px; }
+    .sidebar { display: none; }
+    .sidebar.open { display: flex; }
+  }
+
+  /* =========================================================
+     Header
+  ========================================================= */
+  header {
+    grid-column: 1 / -1;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 0;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 0;
+  }
+
+  .logo {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 1.1rem; font-weight: 700; color: var(--text-primary);
+  }
+
+  .logo-icon {
+    width: 34px; height: 34px;
+    background: linear-gradient(135deg, #6366f1, #22d3ee);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+  }
+
+  .logo-badge {
+    font-size: 0.65rem; font-weight: 600;
+    background: rgba(99,102,241,0.2);
+    border: 1px solid rgba(99,102,241,0.4);
+    border-radius: 4px; padding: 2px 6px;
+    color: var(--accent-blue);
+    letter-spacing: 0.05em;
+  }
+
+  nav { display: flex; gap: 8px; }
+
+  .nav-btn {
+    padding: 7px 14px; border-radius: 8px;
+    background: var(--bg-card); border: 1px solid var(--border);
+    color: var(--text-muted); cursor: pointer; font-size: 0.82rem;
+    transition: all 0.2s;
+  }
+  .nav-btn:hover, .nav-btn.active {
+    background: rgba(99,102,241,0.15); border-color: var(--border-hi);
+    color: var(--text-primary);
+  }
+
+  /* =========================================================
+     Main panel
+  ========================================================= */
+  .main-panel {
+    padding: 32px 32px 32px 0;
+    display: flex; flex-direction: column; gap: 24px;
+    min-height: calc(100vh - 80px);
+  }
+
+  @media (max-width: 900px) { .main-panel { padding: 24px 0; } }
+
+  /* =========================================================
+     Orb
+  ========================================================= */
+  .orb-section {
+    display: flex; flex-direction: column; align-items: center; gap: 20px;
+  }
+
+  .orb-container {
+    position: relative; width: 180px; height: 180px;
+  }
+
+  .orb-ring {
+    position: absolute; inset: -16px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    background: linear-gradient(var(--bg-deep), var(--bg-deep)) padding-box,
+                linear-gradient(135deg, #6366f1, #22d3ee) border-box;
+    animation: spin-ring 8s linear infinite;
+    opacity: 0.5;
+  }
+
+  .orb-ring-2 {
+    position: absolute; inset: -28px;
+    border-radius: 50%;
+    border: 1px solid rgba(99,102,241,0.2);
+    animation: spin-ring 12s linear infinite reverse;
+  }
+
+  @keyframes spin-ring {
+    to { transform: rotate(360deg); }
+  }
+
+  .orb {
+    width: 180px; height: 180px;
+    border-radius: 50%;
+    background: var(--orb-idle);
+    box-shadow: var(--shadow-glow), inset 0 -20px 60px rgba(0,0,0,0.4);
+    cursor: pointer;
+    transition: background 0.6s ease, transform 0.2s, box-shadow 0.4s;
+    position: relative; z-index: 2;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 48px;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .orb:hover { transform: scale(1.04); }
+  .orb:active { transform: scale(0.97); }
+
+  .orb.listening {
+    background: var(--orb-listen);
+    animation: orb-pulse 1s ease-in-out infinite alternate;
+    box-shadow: 0 0 80px rgba(34,211,238,0.4), inset 0 -20px 60px rgba(0,0,0,0.4);
+  }
+
+  .orb.verifying {
+    background: var(--orb-verify);
+    animation: orb-spin 1.2s ease-in-out infinite;
+    box-shadow: 0 0 80px rgba(245,158,11,0.4), inset 0 -20px 60px rgba(0,0,0,0.4);
+  }
+
+  .orb.granted {
+    background: var(--orb-granted);
+    box-shadow: 0 0 100px rgba(16,185,129,0.5), inset 0 -20px 60px rgba(0,0,0,0.4);
+  }
+
+  .orb.denied {
+    background: var(--orb-denied);
+    animation: orb-shake 0.5s ease;
+    box-shadow: 0 0 100px rgba(244,63,94,0.5), inset 0 -20px 60px rgba(0,0,0,0.4);
+  }
+
+  @keyframes orb-pulse {
+    from { transform: scale(1.0); }
+    to   { transform: scale(1.08); }
+  }
+
+  @keyframes orb-spin {
+    0%   { transform: scale(1.0) rotate(0deg); }
+    50%  { transform: scale(1.06) rotate(180deg); }
+    100% { transform: scale(1.0) rotate(360deg); }
+  }
+
+  @keyframes orb-shake {
+    0%, 100% { transform: translateX(0); }
+    20% { transform: translateX(-12px); }
+    40% { transform: translateX(12px); }
+    60% { transform: translateX(-8px); }
+    80% { transform: translateX(8px); }
+  }
+
+  .orb-label {
+    font-size: 0.82rem; font-weight: 600; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--text-muted);
+    transition: color 0.4s;
+  }
+
+  /* =========================================================
+     Access Banner
+  ========================================================= */
+  .access-banner {
+    border-radius: var(--radius);
+    padding: 16px 24px;
+    text-align: center;
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    transition: all 0.5s;
+    min-height: 74px;
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 4px;
+  }
+
+  .access-banner.granted {
+    border-color: rgba(16,185,129,0.5);
+    background: rgba(16,185,129,0.08);
+    box-shadow: 0 0 40px rgba(16,185,129,0.12);
+  }
+
+  .access-banner.denied {
+    border-color: rgba(244,63,94,0.5);
+    background: rgba(244,63,94,0.08);
+    box-shadow: 0 0 40px rgba(244,63,94,0.12);
+  }
+
+  .banner-title {
+    font-size: 1.3rem; font-weight: 700; letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .banner-sub {
+    font-size: 0.82rem; color: var(--text-muted); font-family: var(--mono);
+  }
+
+  .banner-title.granted { color: var(--accent-green); }
+  .banner-title.denied  { color: var(--accent-red); }
+
+  /* =========================================================
+     Transcript & Reply
+  ========================================================= */
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+  }
+
+  .card-label {
+    font-size: 0.72rem; font-weight: 600; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--accent-blue); margin-bottom: 10px;
+  }
+
+  .transcript-box {
+    min-height: 52px;
+    font-size: 0.95rem; color: var(--text-primary);
+    line-height: 1.6;
+    word-break: break-word;
+  }
+
+  .transcript-input {
+    width: 100%; background: transparent; border: none; outline: none;
+    color: var(--text-primary); font-family: 'Inter', sans-serif;
+    font-size: 0.95rem; resize: none; min-height: 52px;
+  }
+
+  .reply-text {
+    font-size: 1.0rem; color: var(--accent-cyan); line-height: 1.7;
+    min-height: 32px; font-style: italic;
+  }
+
+  /* =========================================================
+     Action buttons
+  ========================================================= */
+  .btn-row {
+    display: flex; gap: 12px; flex-wrap: wrap; align-items: center;
+  }
+
+  .btn {
+    padding: 10px 20px; border-radius: 10px; border: 1px solid var(--border);
+    background: var(--bg-card2); color: var(--text-primary);
+    font-family: 'Inter', sans-serif; font-size: 0.87rem; font-weight: 500;
+    cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 6px;
+  }
+
+  .btn:hover {
+    background: rgba(99,102,241,0.18); border-color: var(--border-hi);
+    transform: translateY(-1px);
+  }
+
+  .btn:active { transform: translateY(0); }
+
+  .btn-primary {
+    background: linear-gradient(135deg, #6366f1, #4f46e5);
+    border-color: transparent;
+    box-shadow: 0 4px 20px rgba(99,102,241,0.3);
+  }
+
+  .btn-primary:hover {
+    background: linear-gradient(135deg, #818cf8, #6366f1);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 28px rgba(99,102,241,0.4);
+  }
+
+  .btn-danger {
+    background: rgba(244,63,94,0.1); border-color: rgba(244,63,94,0.3);
+    color: var(--accent-red);
+  }
+
+  .btn-danger:hover { background: rgba(244,63,94,0.2); border-color: rgba(244,63,94,0.5); }
+
+  .btn-sm { padding: 6px 12px; font-size: 0.78rem; border-radius: 7px; }
+
+  /* =========================================================
+     Sidebar (MCP activity)
+  ========================================================= */
+  .sidebar {
+    padding: 32px 0 32px 24px;
+    display: flex; flex-direction: column; gap: 16px;
+    border-left: 1px solid var(--border);
+    position: sticky; top: 0; height: 100vh; overflow-y: auto;
+  }
+
+  .sidebar-title {
+    font-size: 0.72rem; font-weight: 700; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--accent-blue);
+    display: flex; align-items: center; gap: 8px;
+  }
+
+  .live-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--accent-green);
+    animation: blink 1.4s ease infinite;
+  }
+
+  @keyframes blink {
+    0%, 100% { opacity: 1; } 50% { opacity: 0.2; }
+  }
+
+  .mcp-calls { display: flex; flex-direction: column; gap: 10px; }
+
+  .mcp-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    font-family: var(--mono); font-size: 0.75rem;
+    animation: slide-in 0.3s ease;
+  }
+
+  @keyframes slide-in {
+    from { opacity: 0; transform: translateX(20px); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+
+  .mcp-tool { color: var(--accent-cyan); font-weight: 500; margin-bottom: 4px; }
+  .mcp-args { color: var(--text-muted); margin-bottom: 6px; word-break: break-all; }
+  .mcp-result { color: var(--accent-green); }
+  .mcp-latency { color: var(--text-dim); font-size: 0.68rem; margin-top: 4px; }
+  .mcp-empty { color: var(--text-dim); font-size: 0.82rem; text-align: center; padding: 20px 0; }
+
+  /* =========================================================
+     Audit log
+  ========================================================= */
+  .audit-entries { display: flex; flex-direction: column; gap: 6px; }
+
+  .audit-entry {
+    background: var(--bg-card);
+    border-radius: 8px; padding: 8px 12px;
+    display: flex; gap: 10px; align-items: flex-start;
+    font-size: 0.75rem; border-left: 3px solid transparent;
+  }
+
+  .audit-entry.granted { border-left-color: var(--accent-green); }
+  .audit-entry.denied  { border-left-color: var(--accent-red); }
+
+  .audit-badge {
+    font-size: 0.65rem; font-weight: 700; letter-spacing: 0.07em;
+    padding: 2px 6px; border-radius: 4px; white-space: nowrap;
+    text-transform: uppercase;
+  }
+
+  .audit-badge.granted { background: rgba(16,185,129,0.15); color: var(--accent-green); }
+  .audit-badge.denied  { background: rgba(244,63,94,0.15);  color: var(--accent-red); }
+
+  .audit-meta { color: var(--text-muted); flex: 1; line-height: 1.5; }
+  .audit-score { color: var(--text-dim); font-family: var(--mono); }
+
+  /* =========================================================
+     Enrollment panel
+  ========================================================= */
+  #enrollment-panel {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+  }
+
+  .panel-title {
+    font-size: 1.1rem; font-weight: 700; margin-bottom: 20px;
+    display: flex; align-items: center; gap: 10px;
+  }
+
+  .steps-row {
+    display: flex; gap: 8px; margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+
+  .step-chip {
+    padding: 6px 14px; border-radius: 20px;
+    background: var(--bg-card2); border: 1px solid var(--border);
+    font-size: 0.78rem; color: var(--text-muted);
+    transition: all 0.3s;
+  }
+
+  .step-chip.active {
+    background: rgba(99,102,241,0.2); border-color: var(--border-hi);
+    color: var(--text-primary);
+  }
+
+  .step-chip.done {
+    background: rgba(16,185,129,0.15); border-color: rgba(16,185,129,0.4);
+    color: var(--accent-green);
+  }
+
+  .phrase-display {
+    text-align: center; padding: 20px;
+    background: var(--bg-card2); border-radius: 10px;
+    font-size: 1.4rem; font-weight: 600; color: var(--accent-cyan);
+    letter-spacing: 0.05em; margin-bottom: 16px;
+    border: 1px solid var(--border);
+    min-height: 72px; display: flex; align-items: center; justify-content: center;
+  }
+
+  .form-row { display: flex; gap: 10px; align-items: flex-end; margin-bottom: 16px; }
+
+  .form-field { flex: 1; }
+  .form-label { font-size: 0.75rem; color: var(--text-muted); margin-bottom: 6px; }
+  .form-input {
+    width: 100%; padding: 10px 14px;
+    background: var(--bg-card2); border: 1px solid var(--border);
+    border-radius: 8px; color: var(--text-primary);
+    font-family: 'Inter', sans-serif; font-size: 0.9rem; outline: none;
+    transition: border-color 0.2s;
+  }
+  .form-input:focus { border-color: var(--border-hi); }
+
+  .consent-row {
+    display: flex; gap: 10px; align-items: flex-start;
+    background: rgba(245,158,11,0.07); border: 1px solid rgba(245,158,11,0.25);
+    border-radius: 8px; padding: 12px 14px; margin-bottom: 16px;
+    font-size: 0.82rem; color: var(--text-muted); line-height: 1.5;
+  }
+
+  .consent-row input[type="checkbox"] { margin-top: 2px; accent-color: var(--accent-blue); }
+
+  .enrolled-list { display: flex; flex-direction: column; gap: 8px; }
+
+  .user-chip {
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--bg-card2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 14px;
+    transition: border-color 0.2s;
+  }
+
+  .user-chip:hover { border-color: var(--border-hi); }
+
+  .user-name {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 0.88rem; color: var(--text-primary);
+  }
+
+  .user-avatar {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent-blue), var(--accent-cyan));
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.75rem; font-weight: 700;
+  }
+
+  /* =========================================================
+     Toast notification
+  ========================================================= */
+  #toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px);
+    background: var(--bg-card2); border: 1px solid var(--border-hi);
+    border-radius: 10px; padding: 12px 24px;
+    font-size: 0.88rem; color: var(--text-primary);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    z-index: 9999;
+    transition: transform 0.3s ease;
+    max-width: 90vw; text-align: center;
+  }
+
+  #toast.show { transform: translateX(-50%) translateY(0); }
+
+  /* =========================================================
+     Liveness badge
+  ========================================================= */
+  .liveness-badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 4px 10px; border-radius: 20px; font-size: 0.72rem; font-weight: 600;
+    background: rgba(245,158,11,0.12); border: 1px solid rgba(245,158,11,0.3);
+    color: var(--accent-amber);
+  }
+
+  /* =========================================================
+     Divider & misc
+  ========================================================= */
+  .divider { height: 1px; background: var(--border); margin: 4px 0; }
+
+  .tag {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 8px; border-radius: 5px; font-size: 0.7rem; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.06em;
+  }
+
+  .tag-blue { background: rgba(99,102,241,0.15); color: var(--accent-blue); }
+  .tag-cyan { background: rgba(34,211,238,0.12); color: var(--accent-cyan); }
+
+  /* =========================================================
+     Challenge phrase display in ask flow
+  ========================================================= */
+  .challenge-banner {
+    background: rgba(245,158,11,0.07); border: 1px solid rgba(245,158,11,0.3);
+    border-radius: 10px; padding: 12px 18px; margin-bottom: 8px;
+    display: flex; align-items: center; gap: 12px;
+    font-size: 0.88rem;
+  }
+
+  .challenge-phrase-text {
+    font-family: var(--mono); font-size: 1.05rem;
+    color: var(--accent-amber); font-weight: 600; letter-spacing: 0.08em;
+  }
+</style>
+</head>
+<body>
+
+<div class="app-grid">
+  <!-- =================== HEADER =================== -->
+  <header>
+    <div class="logo">
+      <div class="logo-icon">🎙</div>
+      <span>Voice Gate</span>
+      <span class="logo-badge">Alexa+ Sim</span>
+    </div>
+    <nav>
+      <button id="btn-assistant" class="nav-btn active" onclick="showTab('assistant')">🏠 Assistant</button>
+      <button id="btn-enroll"    class="nav-btn" onclick="showTab('enroll')">👤 Enroll</button>
+      <button id="btn-audit"     class="nav-btn" onclick="showTab('audit')">📋 Audit Log</button>
+    </nav>
+  </header>
+
+  <!-- =================== MAIN PANEL =================== -->
+  <div class="main-panel" id="tab-assistant">
+
+    <!-- Orb -->
+    <div class="orb-section">
+      <div class="orb-container">
+        <div class="orb-ring-2"></div>
+        <div class="orb-ring"></div>
+        <div class="orb" id="main-orb" onclick="handleOrbClick()">🎙</div>
+      </div>
+      <div class="orb-label" id="orb-label">TAP TO SPEAK</div>
+    </div>
+
+    <!-- Liveness challenge (shown when enabled) -->
+    <div class="challenge-banner" id="challenge-area" style="display:none;">
+      <span>🛡 Say this phrase:</span>
+      <span class="challenge-phrase-text" id="challenge-text">—</span>
+      <button class="btn btn-sm" onclick="refreshChallenge()">↻</button>
+    </div>
+
+    <!-- Access Banner -->
+    <div class="access-banner" id="access-banner">
+      <div class="banner-title" id="banner-title" style="color:var(--text-muted);font-size:1rem;">
+        Waiting for voice…
+      </div>
+      <div class="banner-sub" id="banner-sub"></div>
+    </div>
+
+    <!-- Transcript -->
+    <div class="card">
+      <div class="card-label">📝 Transcript</div>
+      <div class="transcript-box">
+        <textarea class="transcript-input" id="transcript-input" rows="2"
+          placeholder="Speak via the orb, or type here as a fallback…"></textarea>
+      </div>
+    </div>
+
+    <!-- Reply -->
+    <div class="card">
+      <div class="card-label">🤖 Alexa+ Reply</div>
+      <div class="reply-text" id="reply-text">—</div>
+    </div>
+
+    <!-- Buttons -->
+    <div class="btn-row">
+      <button class="btn btn-primary" id="ask-btn" onclick="handleOrbClick()">
+        🎙 Speak
+      </button>
+      <button class="btn" onclick="textAsk()">
+        ⌨ Ask via text
+      </button>
+      <button class="btn" onclick="fetchChallenge()">
+        🛡 Get challenge
+      </button>
+      <span id="liveness-indicator" class="liveness-badge" style="display:none;">
+        🔒 Liveness ON
+      </span>
+    </div>
+  </div><!-- /tab-assistant -->
+
+  <!-- =================== ENROLLMENT PANEL =================== -->
+  <div class="main-panel" id="tab-enroll" style="display:none;">
+    <div id="enrollment-panel">
+      <div class="panel-title">
+        👤 Enroll a New Voice
+      </div>
+
+      <div class="consent-row">
+        <input type="checkbox" id="consent-check">
+        <label for="consent-check">
+          I consent to storing a speaker embedding (mathematical representation) of my voice.
+          No raw audio is stored. I can delete my voiceprint at any time.
+        </label>
+      </div>
+
+      <div class="form-row">
+        <div class="form-field">
+          <div class="form-label">Your name (letters, numbers, _ - only)</div>
+          <input class="form-input" type="text" id="enroll-name" placeholder="e.g. alice">
+        </div>
+        <button class="btn btn-primary" onclick="startEnrollment()">Start</button>
+      </div>
+
+      <div id="enroll-flow" style="display:none;">
+        <div class="steps-row" id="steps-row">
+          <div class="step-chip" id="step-0">Clip 1</div>
+          <div class="step-chip" id="step-1">Clip 2</div>
+          <div class="step-chip" id="step-2">Clip 3</div>
+          <div class="step-chip" id="step-3">Clip 4</div>
+        </div>
+        <div class="phrase-display" id="enroll-phrase">Press Record to begin</div>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="enroll-record-btn" onclick="recordEnrollClip()">
+            ⏺ Record clip
+          </button>
+          <button class="btn btn-danger" id="enroll-submit-btn" onclick="submitEnrollment()" style="display:none;">
+            ✅ Submit enrollment
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top: 4px;">
+      <div class="card-label">👥 Enrolled Users</div>
+      <div class="enrolled-list" id="enrolled-list">
+        <div style="color:var(--text-dim);font-size:0.85rem;">Loading…</div>
+      </div>
+    </div>
+  </div><!-- /tab-enroll -->
+
+  <!-- =================== AUDIT TAB =================== -->
+  <div class="main-panel" id="tab-audit" style="display:none;">
+    <div class="card">
+      <div class="card-label" style="margin-bottom:16px;">📋 Recent Access Events <span style="color:var(--text-dim);font-weight:400;text-transform:none;letter-spacing:0;">(last 10)</span></div>
+      <div class="audit-entries" id="audit-entries">
+        <div style="color:var(--text-dim);font-size:0.85rem;">Loading…</div>
+      </div>
+      <div style="margin-top:14px;">
+        <button class="btn btn-sm" onclick="loadAudit()">↻ Refresh</button>
+      </div>
+    </div>
+  </div><!-- /tab-audit -->
+
+  <!-- =================== SIDEBAR (MCP) =================== -->
+  <div class="sidebar" id="sidebar">
+    <div class="sidebar-title">
+      <div class="live-dot"></div>
+      MCP Activity
+    </div>
+    <div style="font-size:0.72rem;color:var(--text-dim);">
+      Port <span style="font-family:var(--mono);">8765</span> · Streamable HTTP
+      <br>Protocol <span style="font-family:var(--mono);">2025-11-25</span>
+    </div>
+
+    <div id="mcp-calls" class="mcp-calls">
+      <div class="mcp-empty">No MCP calls yet.<br>Speak to the assistant to see tool calls here.</div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="sidebar-title" style="margin-top:4px;">🔒 Auth Status</div>
+    <div style="font-size:0.78rem;color:var(--text-muted);line-height:1.6;">
+      Token: <span id="token-status" style="font-family:var(--mono);color:var(--text-dim);">none</span>
+      <br>TTL: <span style="font-family:var(--mono);">60s</span>
+      <br>Signed: <span style="color:var(--accent-green);">HMAC-SHA256</span>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="sidebar-title">📡 Protocol</div>
+    <div style="font-size:0.72rem;color:var(--text-muted);line-height:1.8;">
+      <div><span class="tag tag-blue">SDK</span> mcp 2.3.0</div>
+      <div><span class="tag tag-cyan">Transport</span> Streamable HTTP</div>
+      <div><span class="tag tag-blue">Auth</span> Bearer Token</div>
+    </div>
+  </div>
+</div><!-- /app-grid -->
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<script>
+// ==========================================================
+// State
+// ==========================================================
+let mediaRecorder = null;
+let recordedChunks = [];
+let isRecording = false;
+let speechRec = null;
+let liveTranscript = '';
+
+// Enrollment state
+const ENROLLMENT_PHRASES = [
+  "Alexa, set a reminder for tomorrow",
+  "Turn on the living room light",
+  "What's on my shopping list?",
+  "Hey Alexa, what time is it now?"
+];
+let enrollClips = [];
+let enrollStep = 0;
+let enrollName = '';
+
+// ==========================================================
+// Tab management
+// ==========================================================
+function showTab(tab) {
+  ['assistant','enroll','audit'].forEach(t => {
+    document.getElementById('tab-'+t).style.display = (t === tab) ? 'flex' : 'none';
+    document.getElementById('btn-'+t).classList.toggle('active', t === tab);
+  });
+  if (tab === 'enroll') loadUsers();
+  if (tab === 'audit')  loadAudit();
+}
+
+// ==========================================================
+// Toast
+// ==========================================================
+let toastTimer = null;
+function toast(msg, duration=3000) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), duration);
+}
+
+// ==========================================================
+// Orb state machine
+// ==========================================================
+const OrbState = { IDLE:'idle', LISTENING:'listening', VERIFYING:'verifying', GRANTED:'granted', DENIED:'denied' };
+let orbState = OrbState.IDLE;
+
+function setOrbState(state) {
+  orbState = state;
+  const orb = document.getElementById('main-orb');
+  const label = document.getElementById('orb-label');
+  orb.className = 'orb ' + state;
+  const config = {
+    idle:      { icon:'🎙', label:'TAP TO SPEAK' },
+    listening: { icon:'👂', label:'LISTENING…' },
+    verifying: { icon:'🔍', label:'VERIFYING VOICE…' },
+    granted:   { icon:'✅', label:'ACCESS GRANTED' },
+    denied:    { icon:'🚫', label:'ACCESS DENIED' },
+  };
+  const c = config[state] || config.idle;
+  orb.textContent = c.icon;
+  label.textContent = c.label;
+}
+
+function setBanner(type, title, sub) {
+  const banner = document.getElementById('access-banner');
+  const titleEl = document.getElementById('banner-title');
+  const subEl = document.getElementById('banner-sub');
+  banner.className = 'access-banner ' + type;
+  titleEl.className = 'banner-title ' + type;
+  titleEl.textContent = title;
+  subEl.textContent = sub;
+}
+
+// ==========================================================
+// Challenge phrases (P1)
+// ==========================================================
+let livenessEnabled = false;
+let currentChallenge = '';
+
+async function fetchChallenge() {
+  try {
+    const r = await fetch('/api/challenge');
+    const d = await r.json();
+    currentChallenge = d.phrase;
+    livenessEnabled = d.liveness_enabled;
+    document.getElementById('challenge-text').textContent = currentChallenge;
+    document.getElementById('challenge-area').style.display = livenessEnabled ? 'flex' : 'none';
+    document.getElementById('liveness-indicator').style.display = livenessEnabled ? 'inline-flex' : 'none';
+  } catch(e) {}
+}
+
+function refreshChallenge() { fetchChallenge(); }
+
+// ==========================================================
+// Recording & Speech Recognition
+// ==========================================================
+async function startRecording() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: { sampleRate: 16000, channelCount: 1 } });
+    recordedChunks = [];
+    mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
+    mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
+    mediaRecorder.start(100);
+    isRecording = true;
+
+    // Web Speech API for live transcript
+    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      speechRec = new SR();
+      speechRec.continuous = true;
+      speechRec.interimResults = true;
+      liveTranscript = '';
+      speechRec.onresult = (e) => {
+        let interim = '';
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+          if (e.results[i].isFinal) liveTranscript += e.results[i][0].transcript + ' ';
+          else interim = e.results[i][0].transcript;
+        }
+        document.getElementById('transcript-input').value = liveTranscript + interim;
+      };
+      speechRec.start();
+    }
+  } catch(e) {
+    toast('Microphone access denied: ' + e.message);
+    throw e;
+  }
+}
+
+async function stopRecording() {
+  return new Promise((resolve) => {
+    if (speechRec) { try { speechRec.stop(); } catch(e) {} }
+    if (!mediaRecorder) { resolve(null); return; }
+    mediaRecorder.onstop = () => {
+      const blob = new Blob(recordedChunks, { type: 'audio/webm' });
+      mediaRecorder.stream.getTracks().forEach(t => t.stop());
+      resolve(blob);
+    };
+    mediaRecorder.stop();
+    isRecording = false;
+  });
+}
+
+// Convert webm blob to WAV-like blob for server (send as-is, server checks header)
+// We send the audio as-is and rely on the browser to produce a usable format.
+// The server validates WAV; for the demo we actually need to record as WAV.
+// We use a ScriptProcessor approach for true WAV PCM.
+async function recordToWAV(durationMs) {
+  let audioCtx, source, scriptNode, stream;
+  const pcmBuffers = [];
+
+  stream = await navigator.mediaDevices.getUserMedia({ audio: { sampleRate: 16000, channelCount: 1 } });
+  audioCtx = new AudioContext({ sampleRate: 16000 });
+  source = audioCtx.createMediaStreamSource(stream);
+  scriptNode = audioCtx.createScriptProcessor(4096, 1, 1);
+  scriptNode.onaudioprocess = (e) => {
+    const buf = e.inputBuffer.getChannelData(0);
+    pcmBuffers.push(new Float32Array(buf));
+  };
+  source.connect(scriptNode);
+  scriptNode.connect(audioCtx.destination);
+
+  // Speech recognition
+  if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    speechRec = new SR();
+    speechRec.continuous = true;
+    speechRec.interimResults = true;
+    liveTranscript = '';
+    speechRec.onresult = (e) => {
+      let interim = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) liveTranscript += e.results[i][0].transcript + ' ';
+        else interim = e.results[i][0].transcript;
+      }
+      document.getElementById('transcript-input').value = liveTranscript + interim;
+    };
+    try { speechRec.start(); } catch(e) {}
+  }
+
+  await new Promise(r => setTimeout(r, durationMs));
+
+  if (speechRec) { try { speechRec.stop(); } catch(e) {} }
+  scriptNode.disconnect();
+  source.disconnect();
+  stream.getTracks().forEach(t => t.stop());
+  await audioCtx.close();
+
+  // Build WAV
+  const total = pcmBuffers.reduce((s,b) => s + b.length, 0);
+  const samples = new Int16Array(total);
+  let offset = 0;
+  for (const buf of pcmBuffers) {
+    for (let i = 0; i < buf.length; i++) {
+      samples[offset++] = Math.max(-32768, Math.min(32767, Math.round(buf[i] * 32767)));
+    }
+  }
+  return buildWAV(samples, 16000);
+}
+
+function buildWAV(samples, sampleRate) {
+  const numChannels = 1, bitsPerSample = 16;
+  const byteRate = sampleRate * numChannels * bitsPerSample / 8;
+  const blockAlign = numChannels * bitsPerSample / 8;
+  const dataSize = samples.length * 2;
+  const buf = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(buf);
+  const write = (str, off) => { for (let i=0;i<str.length;i++) view.setUint8(off+i, str.charCodeAt(i)); };
+  write('RIFF', 0); view.setUint32(4, 36+dataSize, true);
+  write('WAVE', 8); write('fmt ', 12);
+  view.setUint32(16, 16, true); view.setUint16(20, 1, true);
+  view.setUint16(22, numChannels, true); view.setUint32(24, sampleRate, true);
+  view.setUint32(28, byteRate, true); view.setUint16(32, blockAlign, true);
+  view.setUint16(34, bitsPerSample, true); write('data', 36);
+  view.setUint32(40, dataSize, true);
+  const out = new Int16Array(buf, 44);
+  for (let i=0; i<samples.length; i++) out[i] = samples[i];
+  return new Blob([buf], {type:'audio/wav'});
+}
+
+// ==========================================================
+// Main orb click – record 4 seconds then ask
+// ==========================================================
+async function handleOrbClick() {
+  if (orbState === OrbState.LISTENING) {
+    toast('Already recording!');
+    return;
+  }
+  setOrbState(OrbState.LISTENING);
+  setBanner('', 'Listening… speak now', '');
+  document.getElementById('transcript-input').value = '';
+  liveTranscript = '';
+
+  let wavBlob;
+  try {
+    wavBlob = await recordToWAV(4000);
+  } catch(e) {
+    setOrbState(OrbState.IDLE);
+    setBanner('', 'Microphone error', e.message);
+    return;
+  }
+
+  setOrbState(OrbState.VERIFYING);
+  setBanner('', 'Verifying voice…', '');
+
+  const transcript = (document.getElementById('transcript-input').value || liveTranscript).trim();
+  await sendAsk(wavBlob, transcript);
+}
+
+// ==========================================================
+// Text-mode ask (bypass microphone, still need enrolled voice)
+// ==========================================================
+async function textAsk() {
+  const t = document.getElementById('transcript-input').value.trim();
+  if (!t) { toast('Type something first'); return; }
+
+  // We still need audio for voice verification – use a silent 1-second WAV
+  const silence = new Int16Array(16000); // 1 second silence at 16kHz
+  const wavBlob = buildWAV(silence, 16000);
+
+  setOrbState(OrbState.VERIFYING);
+  setBanner('', 'Verifying voice…', '');
+  await sendAsk(wavBlob, t);
+}
+
+async function sendAsk(wavBlob, transcript) {
+  const fd = new FormData();
+  fd.append('audio', wavBlob, 'audio.wav');
+  fd.append('transcript', transcript);
+
+  try {
+    const resp = await fetch('/api/ask', { method: 'POST', body: fd });
+    const data = await resp.json();
+    handleAskResponse(data);
+  } catch(e) {
+    setOrbState(OrbState.IDLE);
+    setBanner('', 'Network error', e.message);
+    toast('Request failed: ' + e.message);
+  }
+}
+
+function handleAskResponse(data) {
+  if (data.granted) {
+    setOrbState(OrbState.GRANTED);
+    setBanner('granted', `✅ ACCESS GRANTED — ${data.user}`, `Score: ${(data.score*100).toFixed(1)}%`);
+    document.getElementById('reply-text').textContent = data.reply || '—';
+    document.getElementById('token-status').textContent = 'issued';
+    document.getElementById('token-status').style.color = 'var(--accent-green)';
+    addMcpCalls(data.mcp_trace || []);
+    speakReply(data.reply);
+  } else {
+    setOrbState(OrbState.DENIED);
+    setBanner('denied', '🚫 ACCESS DENIED', `Score: ${((data.score||0)*100).toFixed(1)}% — Voice not recognized`);
+    document.getElementById('reply-text').textContent = data.reply || 'Voice not recognized.';
+    document.getElementById('token-status').textContent = 'none';
+    document.getElementById('token-status').style.color = 'var(--text-dim)';
+  }
+  // Reset orb after 4 seconds
+  setTimeout(() => setOrbState(OrbState.IDLE), 4000);
+}
+
+// ==========================================================
+// Speech synthesis
+// ==========================================================
+function speakReply(text) {
+  if (!text || !window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+  const utt = new SpeechSynthesisUtterance(text);
+  utt.rate = 1.0; utt.pitch = 1.0; utt.volume = 1.0;
+  window.speechSynthesis.speak(utt);
+}
+
+// ==========================================================
+// MCP Activity Panel
+// ==========================================================
+function addMcpCalls(trace) {
+  const container = document.getElementById('mcp-calls');
+  if (!trace || trace.length === 0) return;
+  // Clear empty state
+  const empty = container.querySelector('.mcp-empty');
+  if (empty) empty.remove();
+
+  trace.forEach(call => {
+    const card = document.createElement('div');
+    card.className = 'mcp-card';
+    card.innerHTML = `
+      <div class="mcp-tool">⚡ ${escHtml(call.tool)}</div>
+      <div class="mcp-args">${escHtml(JSON.stringify(call.args || {}))}</div>
+      <div class="mcp-result">↳ ${escHtml(call.result || '')}</div>
+      <div class="mcp-latency">⏱ ${call.latency_ms}ms</div>
+    `;
+    container.insertBefore(card, container.firstChild);
+  });
+
+  // Keep max 10 cards
+  while (container.children.length > 10) {
+    container.removeChild(container.lastChild);
+  }
+}
+
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ==========================================================
+// Enrollment flow
+// ==========================================================
+function startEnrollment() {
+  if (!document.getElementById('consent-check').checked) {
+    toast('Please tick the consent checkbox first');
+    return;
+  }
+  const name = document.getElementById('enroll-name').value.trim();
+  if (!name || !/^[A-Za-z0-9_\-]{1,64}$/.test(name)) {
+    toast('Enter a valid name (letters, numbers, _, - only)');
+    return;
+  }
+  enrollName = name;
+  enrollClips = [];
+  enrollStep = 0;
+  document.getElementById('enroll-flow').style.display = 'block';
+  updateEnrollUI();
+}
+
+function updateEnrollUI() {
+  for (let i = 0; i < 4; i++) {
+    const chip = document.getElementById('step-' + i);
+    chip.className = 'step-chip' + (i < enrollStep ? ' done' : i === enrollStep ? ' active' : '');
+    if (i < enrollStep) chip.textContent = '✓ Clip ' + (i+1);
+  }
+
+  const phrases = ENROLLMENT_PHRASES;
+  const phraseEl = document.getElementById('enroll-phrase');
+  if (enrollStep < 4) {
+    phraseEl.textContent = '"' + phrases[enrollStep] + '"';
+    document.getElementById('enroll-record-btn').style.display = 'flex';
+  } else {
+    phraseEl.textContent = 'All clips recorded! Submit to finish.';
+    document.getElementById('enroll-record-btn').style.display = 'none';
+    document.getElementById('enroll-submit-btn').style.display = 'flex';
+  }
+}
+
+async function recordEnrollClip() {
+  const btn = document.getElementById('enroll-record-btn');
+  btn.textContent = '⏹ Stop (recording…)';
+  btn.disabled = true;
+
+  let wavBlob;
+  try {
+    wavBlob = await recordToWAV(3000);
+  } catch(e) {
+    toast('Mic error: ' + e.message);
+    btn.textContent = '⏺ Record clip';
+    btn.disabled = false;
+    return;
+  }
+
+  enrollClips.push(wavBlob);
+  enrollStep++;
+  btn.textContent = '⏺ Record clip';
+  btn.disabled = false;
+  updateEnrollUI();
+  toast(`Clip ${enrollStep} recorded ✓`);
+}
+
+async function submitEnrollment() {
+  if (enrollClips.length < 3) { toast('Need at least 3 clips'); return; }
+  const btn = document.getElementById('enroll-submit-btn');
+  btn.textContent = '⏳ Enrolling…'; btn.disabled = true;
+
+  const fd = new FormData();
+  fd.append('name', enrollName);
+  fd.append('consent', 'true');
+  enrollClips.forEach((blob, i) => fd.append('clips', blob, `clip${i}.wav`));
+
+  try {
+    const r = await fetch('/api/enroll', { method:'POST', body:fd });
+    let d;
+    try {
+      d = await r.json();
+    } catch (_) {
+      const text = await r.text();
+      d = { detail: text || ('HTTP ' + r.status) };
+    }
+    if (r.ok) {
+      toast(`✅ ${enrollName} enrolled with ${d.clips} clips!`);
+      document.getElementById('enroll-flow').style.display = 'none';
+      enrollClips = []; enrollStep = 0;
+      loadUsers();
+    } else {
+      toast('Enrollment failed: ' + (d.detail || JSON.stringify(d)));
+    }
+  } catch(e) {
+    toast('Network error: ' + e.message);
+  }
+  btn.textContent = '✅ Submit enrollment'; btn.disabled = false;
+}
+
+// ==========================================================
+// User list
+// ==========================================================
+async function loadUsers() {
+  try {
+    const r = await fetch('/api/users');
+    const d = await r.json();
+    renderUsers(d.users || []);
+  } catch(e) {
+    document.getElementById('enrolled-list').innerHTML =
+      '<div style="color:var(--text-dim)">Error loading users</div>';
+  }
+}
+
+function renderUsers(users) {
+  const el = document.getElementById('enrolled-list');
+  if (!users.length) {
+    el.innerHTML = '<div style="color:var(--text-dim);font-size:0.85rem;">No users enrolled yet.</div>';
+    return;
+  }
+  el.innerHTML = users.map(u => `
+    <div class="user-chip">
+      <div class="user-name">
+        <div class="user-avatar">${u[0].toUpperCase()}</div>
+        ${escHtml(u)}
+      </div>
+      <button class="btn btn-danger btn-sm" onclick="deleteUser('${escHtml(u)}')">🗑 Delete</button>
+    </div>
+  `).join('');
+}
+
+async function deleteUser(name) {
+  if (!confirm(`Delete voiceprint for ${name}?`)) return;
+  await fetch('/api/users/' + encodeURIComponent(name), { method:'DELETE' });
+  toast(`Deleted ${name}`);
+  loadUsers();
+}
+
+// ==========================================================
+// Audit log
+// ==========================================================
+async function loadAudit() {
+  try {
+    const r = await fetch('/api/audit?n=10');
+    const d = await r.json();
+    renderAudit(d.events || []);
+  } catch(e) {
+    document.getElementById('audit-entries').innerHTML =
+      '<div style="color:var(--text-dim)">Error loading audit log</div>';
+  }
+}
+
+function renderAudit(events) {
+  const el = document.getElementById('audit-entries');
+  if (!events.length) {
+    el.innerHTML = '<div style="color:var(--text-dim);font-size:0.85rem;">No events yet.</div>';
+    return;
+  }
+  el.innerHTML = [...events].reverse().map(e => `
+    <div class="audit-entry ${e.granted ? 'granted' : 'denied'}">
+      <span class="audit-badge ${e.granted ? 'granted' : 'denied'}">${e.granted ? 'GRANTED' : 'DENIED'}</span>
+      <div class="audit-meta">
+        ${e.user ? `<strong>${escHtml(e.user)}</strong>` : '<em>unknown</em>'}
+        ${e.query ? ` — "${escHtml(e.query.substring(0,40))}"` : ''}
+        <br>
+        <small style="color:var(--text-dim)">${new Date(e.ts).toLocaleString()}</small>
+      </div>
+      <div class="audit-score">${e.score !== null ? (e.score*100).toFixed(1)+'%' : '—'}</div>
+    </div>
+  `).join('');
+}
+
+// ==========================================================
+// Init
+// ==========================================================
+window.addEventListener('DOMContentLoaded', () => {
+  fetchChallenge();
+  loadUsers();
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+services:
+  voicegate:
+    build: .
+    container_name: voicegate-alexa-plus
+    ports:
+      - "8000:8000"
+      - "8765:8765"
+    environment:
+      - VOICEGATE_THRESHOLD=0.40
+      - VOICEGATE_LIVENESS=0
+      - VOICEGATE_LLM=none
+      - APP_PORT=8000
+      - MCP_PORT=8765
+    volumes:
+      - ./voiceprints:/app/voiceprints
+      - ./pretrained_models:/app/pretrained_models
+    restart: unless-stopped

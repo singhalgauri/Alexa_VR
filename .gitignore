@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+*.whl
+
+# Virtual environments
+venv/
+.venv/
+env/
+.env
+
+# Biometric / model data - NEVER commit these
+voiceprints/
+pretrained_models/
+*.npy
+
+# Secrets and config
+.env
+*.secret
+secrets.json
+
+# Data files (JSONL audit log, user data)
+data/
+audit.jsonl
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

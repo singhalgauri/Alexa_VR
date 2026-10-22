@@ -1,0 +1,36 @@
+# Voice Gate for Alexa+ - Requirements
+# Pin all versions after a successful run.
+
+# --- Core web framework ---
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+python-multipart==0.0.12
+starlette==0.41.3
+
+# --- MCP SDK (supports Streamable HTTP, protocol 2025-11-25+) ---
+mcp==2.3.0
+httpx2>=2.10.0
+
+# --- Speaker recognition ---
+speechbrain==1.0.2
+torch==2.4.1
+torchaudio==2.4.1
+numpy==1.26.4
+huggingface-hub==0.26.2
+
+# --- Token signing ---
+PyJWT[crypto]==2.10.1
+cryptography==43.0.3
+
+# --- Audio processing ---
+soundfile==0.12.1
+scipy==1.13.1
+
+# --- Testing ---
+pytest==8.3.3
+pytest-asyncio==0.24.0
+httpx==0.27.2
+anyio==4.6.2
+
+# --- Utilities ---
+python-dotenv==1.0.1
