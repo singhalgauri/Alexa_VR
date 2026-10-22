@@ -225,6 +225,117 @@ Access the application at `http://localhost:8000`. Voiceprints and models are mo
 
 ---
 
-## 12. License & Open Source
+## 12. Voice-Identity-Based Access Control Layer
 
-This project is licensed under the **MIT License**. See [LICENSE](LICENSE) for details. Developed for the Amazon Developer Hackathon 2026.
+A modular permission layer sitting between speaker recognition and assistant skills, ensuring users and guests only access permitted features and data.
+
+### Architecture Flow
+
+```mermaid
+flowchart TD
+    Audio([Voice Input / Audio]) --> Wrapper[SpeakerIdentityModule]
+    Wrapper --> MultiCheck{Multi-speaker or ambiguous?}
+    MultiCheck -- Yes --> DemoteGuest[Demote to GUEST]
+    MultiCheck -- No --> ConfCheck{Confidence >= Tier Threshold?}
+    ConfCheck -- No --> DemoteGuest
+    ConfCheck -- Yes --> RoleResolve[Role: ENROLLED or GUEST]
+
+    Utterance([Text Utterance]) --> Classifier[IntentClassifier & Routine Resolver]
+    Classifier --> IntentMeta[Category, Tier, Personal Data Flag]
+
+    DemoteGuest --> Gate[PolicyEnforcementGate]
+    RoleResolve --> Gate
+    IntentMeta --> Gate
+
+    Gate --> T0Check{Tier 0 Emergency?}
+    T0Check -- "Yes" --> ExecSkill[Execute Skill Handler]
+    
+    T0Check -- "No" --> LockCheck{Locked Out?}
+    LockCheck -- "Yes" --> RefuseLock[429 Security Lockout Message]
+    
+    LockCheck -- "No" --> PersonalCheck{Personal Data?}
+    PersonalCheck -- "Guest or Other User" --> PoliteRefusal["I can't help with that for guests."]
+    PersonalCheck -- "Self Enrolled" --> ExecSkill
+
+    PersonalCheck -- "No" --> TierEval{Tier Policy Check}
+    TierEval -- "Tier 1: Guest Allowed" --> ExecSkill
+    TierEval -- "Tier 2: Guest Blocked (unless enabled)" --> ExecSkill
+    TierEval -- "Tier 3: Enrolled-only (Verbal Confirmation for Guests)" --> ExecSkill
+    TierEval -- "Tier 4: Enrolled + Voice PIN Required" --> PINCheck{Valid PIN?}
+    PINCheck -- "Valid" --> ExecSkill
+    PINCheck -- "Invalid" --> ChallengePIN[Challenge Voice PIN]
+    TierEval -- "Guest Blocked" --> PoliteRefusal
+
+    ExecSkill --> Audit[(Audit Log: audit.jsonl)]
+```
+
+### Sensitivity Tier Matrix
+
+| Tier | Sensitivity Level | Guest Default | Enrolled Configurable? | Verification & Security Requirements | Included Categories |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Tier 0** | **Emergency** | **Allowed** | ❌ Immutable | Exempt from confidence gating. Always allowed for everyone. | Emergency ("call 911", "I need help", "call ambulance") |
+| **Tier 1** | **Guest-Allowed** | **Allowed** | ✅ Yes (Can disable) | Normal confidence threshold (`>= 0.40`). | Music & Entertainment, General Information (weather, news, recipes, facts) |
+| **Tier 2** | **Guest-Blocked** | **Blocked** | ✅ Yes (Can enable) | Normal confidence threshold (`>= 0.40`). | Smart Home Control (lights, plugs, thermostat), Video & TV, Generic Timers, Allow-listed Skills |
+| **Tier 3** | **Enrolled-Only** | **Blocked** | ⚠️ Yes (Requires PIN / verbal confirmation + risk warning) | High confidence (`>= 0.65`). Personal data portions strictly stay blocked. | Communication & Intercom, Home Security (locks, garage, alarm), Shopping, Routines, Kids/Family |
+| **Tier 4** | **Restricted Admin** | **Blocked** | ❌ Immutable | Very High confidence (`>= 0.80`) + Voice PIN (Second Factor). | Payments & Banking, Food/Ride Ordering, Device Settings, Guest Permission Management |
+| **Personal Data** | **Per-User Isolated** | **Blocked** | ❌ Immutable | Strictly restricted to owning user. Zero info leakage on refusals. | Calendar, Reminders, Notes, Email, Contacts, Orders, Location History |
+
+### How to Plug In Your Real Speaker Recognition Model
+
+Connect your black-box model `identify_speaker(audio) -> {"user_id": str | None, "confidence": float}` into the gate:
+
+```python
+from access_control import PolicyEnforcementGate, SpeakerIdentityModule, SpeakerIdentificationResult
+
+# 1. Your existing model function
+def my_speaker_model(audio_data):
+    # Calls your neural model / ECAPA-TDNN embedder
+    user_id, confidence = my_detector.predict(audio_data)
+    return {"user_id": user_id, "confidence": confidence}
+
+# 2. Attach adapter to the access control gate
+speaker_module = SpeakerIdentityModule(model_fn=my_speaker_model)
+gate = PolicyEnforcementGate()
+
+# 3. Process an incoming voice request
+speaker_result = speaker_module.process_audio(audio_buffer)
+decision = gate.process_request(
+    utterance="unlock the front door",
+    speaker_result=speaker_result,
+    pin_attempt="1234" # optional PIN if challenged
+)
+
+print(decision.allowed)          # True or False
+print(decision.response_message) # Spoken response or polite refusal
+```
+
+### Running the Simulator
+
+Test any scenario immediately without needing audio files:
+
+```bash
+# 1. Test guest attempting to unlock front door (Tier 3 - Denied with polite refusal)
+python simulator.py "speaker=guest, confidence=0.4, utterance='unlock the front door'"
+
+# 2. Test emergency call at 0 confidence (Tier 0 - Always Allowed)
+python simulator.py "speaker=guest, confidence=0.0, utterance='call 911'"
+
+# 3. Test enrolled user granting smart home access to guests using Voice PIN
+python simulator.py --speaker gauravi --confidence 0.95 --pin 1234 --utterance "Allow guests to use smart home control"
+
+# 4. Interactive REPL simulator mode:
+python simulator.py
+```
+
+### Running the Access Control Test Suite
+
+```bash
+python -m pytest tests/test_access_control.py -v
+```
+
+---
+
+## 13. License & Open Source
+
+This project is licensed under the **MIT License**. See [LICENSE](LICENSE) for details.
+

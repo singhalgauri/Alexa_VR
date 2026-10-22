@@ -27,6 +27,7 @@ secrets.json
 # Data files (JSONL audit log, user data)
 data/
 audit.jsonl
+access_control_audit.jsonl
 
 # Test artifacts
 .pytest_cache/

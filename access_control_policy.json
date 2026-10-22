@@ -1,0 +1,41 @@
+{
+  "guest_permissions": {
+    "emergency": true,
+    "music_entertainment": true,
+    "general_info": true,
+    "smart_home": true,
+    "video_tv": false,
+    "generic_timers": false,
+    "third_party_skills": false,
+    "communication": false,
+    "home_security": false,
+    "shopping": false,
+    "routines": false,
+    "kids_family": false,
+    "payments_banking": false,
+    "food_ride_ordering": false,
+    "device_account_settings": false,
+    "guest_permission_management": false,
+    "personal_data": false
+  },
+  "third_party_allowlist": [
+    "calm_meditation",
+    "daily_quote",
+    "trivia_time"
+  ],
+  "user_pins": {
+    "gauravi": "1234",
+    "john": "4321",
+    "alice": "9999"
+  },
+  "enrolled_users": [
+    "p",
+    "G",
+    "john",
+    "alice",
+    "gauravi"
+  ],
+  "threshold_normal": 0.4,
+  "threshold_high": 0.65,
+  "threshold_very_high": 0.8
+}

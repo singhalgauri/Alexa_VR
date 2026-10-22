@@ -570,6 +570,72 @@
     font-family: var(--mono); font-size: 1.05rem;
     color: var(--accent-amber); font-weight: 600; letter-spacing: 0.08em;
   }
+  /* =========================================================
+     Access Control Policy & Tier Badges
+  ========================================================= */
+  .policy-meta-row {
+    display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px;
+    animation: slide-in 0.3s ease;
+  }
+  .policy-pill {
+    font-size: 0.72rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.05em; padding: 4px 10px; border-radius: 6px;
+    font-family: var(--mono);
+  }
+  .tier-pill { background: rgba(99,102,241,0.18); color: var(--accent-blue); border: 1px solid rgba(99,102,241,0.3); }
+  .role-pill { background: rgba(34,211,238,0.15); color: var(--accent-cyan); border: 1px solid rgba(34,211,238,0.3); }
+  .cat-pill { background: rgba(245,158,11,0.15); color: var(--accent-amber); border: 1px solid rgba(245,158,11,0.3); }
+  .status-pill.allowed { background: rgba(16,185,129,0.18); color: var(--accent-green); border: 1px solid rgba(16,185,129,0.3); }
+  .status-pill.denied { background: rgba(244,63,94,0.18); color: var(--accent-red); border: 1px solid rgba(244,63,94,0.3); }
+
+  .pin-challenge-card {
+    background: var(--bg-card2); border: 1px solid var(--accent-amber);
+    border-radius: 12px; padding: 14px 18px; margin-bottom: 16px;
+    animation: slide-in 0.3s ease;
+  }
+  .pin-challenge-header {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 0.88rem; font-weight: 600; color: var(--accent-amber); margin-bottom: 6px;
+  }
+
+  .access-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px;
+  }
+  .access-card {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; justify-content: space-between;
+    transition: transform 0.2s, border-color 0.2s;
+  }
+  .access-card:hover { border-color: var(--border-hi); transform: translateY(-2px); }
+  .access-card-head { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
+  .access-card-title { font-size: 0.92rem; font-weight: 600; color: var(--text-primary); }
+  .access-card-tier {
+    font-size: 0.65rem; font-weight: 700; text-transform: uppercase; padding: 2px 6px;
+    border-radius: 4px; font-family: var(--mono);
+  }
+  .tier-0 { background: rgba(16,185,129,0.15); color: var(--accent-green); border: 1px solid rgba(16,185,129,0.3); }
+  .tier-1 { background: rgba(34,211,238,0.15); color: var(--accent-cyan); border: 1px solid rgba(34,211,238,0.3); }
+  .tier-2 { background: rgba(99,102,241,0.15); color: var(--accent-blue); border: 1px solid rgba(99,102,241,0.3); }
+  .tier-3 { background: rgba(245,158,11,0.15); color: var(--accent-amber); border: 1px solid rgba(245,158,11,0.3); }
+  .tier-4 { background: rgba(244,63,94,0.15); color: var(--accent-red); border: 1px solid rgba(244,63,94,0.3); }
+
+  .access-card-desc { font-size: 0.78rem; color: var(--text-muted); line-height: 1.4; margin-bottom: 12px; }
+  .access-card-action { display: flex; justify-content: space-between; align-items: center; }
+
+  /* Modern Switch */
+  .switch { position: relative; display: inline-block; width: 44px; height: 24px; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .slider {
+    position: absolute; cursor: pointer; inset: 0; background-color: var(--bg-card2);
+    border: 1px solid var(--border); transition: .3s; border-radius: 24px;
+  }
+  .slider:before {
+    position: absolute; content: ""; height: 16px; width: 16px; left: 3px; bottom: 3px;
+    background-color: var(--text-muted); transition: .3s; border-radius: 50%;
+  }
+  input:checked + .slider { background-color: var(--accent-blue); border-color: var(--accent-blue); }
+  input:checked + .slider:before { transform: translateX(20px); background-color: #fff; }
+  input:disabled + .slider { opacity: 0.5; cursor: not-allowed; }
 </style>
 </head>
 <body>
@@ -585,6 +651,7 @@
     <nav>
       <button id="btn-assistant" class="nav-btn active" onclick="showTab('assistant')">🏠 Assistant</button>
       <button id="btn-enroll"    class="nav-btn" onclick="showTab('enroll')">👤 Enroll</button>
+      <button id="btn-access"    class="nav-btn" onclick="showTab('access')">🛡 Access Control</button>
       <button id="btn-audit"     class="nav-btn" onclick="showTab('audit')">📋 Audit Log</button>
     </nav>
   </header>
@@ -615,6 +682,29 @@
         Waiting for voice…
       </div>
       <div class="banner-sub" id="banner-sub"></div>
+    </div>
+
+    <!-- Policy & Sensitivity Tier Badges -->
+    <div class="policy-meta-row" id="policy-meta-row" style="display:none;">
+      <span class="policy-pill tier-pill" id="badge-tier">Tier 1</span>
+      <span class="policy-pill role-pill" id="badge-role">Role: Guest</span>
+      <span class="policy-pill cat-pill" id="badge-cat">Category: General</span>
+      <span class="policy-pill status-pill allowed" id="badge-status">Allowed</span>
+    </div>
+
+    <!-- Voice PIN Challenge Card (Tier 4 Second Factor) -->
+    <div class="pin-challenge-card" id="pin-challenge-card" style="display:none;">
+      <div class="pin-challenge-header">
+        <span>🔐 Voice PIN Required (Tier 4 Second Factor)</span>
+        <button class="btn btn-sm" onclick="cancelPinChallenge()">✕</button>
+      </div>
+      <p style="color:var(--text-muted);font-size:0.82rem;margin-bottom:8px;">
+        This sensitive command requires your 4-digit voice PIN.
+      </p>
+      <div style="display:flex;gap:8px;">
+        <input type="password" id="voice-pin-input" class="form-input" placeholder="e.g. 1234" maxlength="8" style="max-width:180px;">
+        <button class="btn btn-primary btn-sm" onclick="submitWithPin()">Submit PIN</button>
+      </div>
     </div>
 
     <!-- Transcript -->
@@ -699,6 +789,28 @@
     </div>
   </div><!-- /tab-enroll -->
 
+  <!-- =================== ACCESS CONTROL PANEL =================== -->
+  <div class="main-panel" id="tab-access" style="display:none;flex-direction:column;gap:16px;">
+    <div id="access-control-panel" class="card">
+      <div class="panel-title" style="justify-content:space-between;">
+        <span>🛡 Sensitivity Tiers & Guest Permissions</span>
+        <button class="btn btn-sm" onclick="loadAccessControl()">↻ Refresh</button>
+      </div>
+      <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:16px;line-height:1.5;">
+        Configure which feature categories guests can access. <strong>Tier 0 (Emergency)</strong> is always allowed for everyone. <strong>Tier 4 (Admin / Payments)</strong> is strictly enrolled-only and requires a voice PIN to change permissions.
+      </p>
+
+      <div class="access-grid" id="access-grid">
+        <div style="color:var(--text-dim);font-size:0.85rem;">Loading permissions…</div>
+      </div>
+
+      <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+        <span style="color:var(--text-dim);font-size:0.78rem;">Persistent settings stored in access_control_policy.json</span>
+        <button class="btn btn-sm btn-danger" onclick="resetPermissionsToDefault()">Reset to Defaults</button>
+      </div>
+    </div>
+  </div><!-- /tab-access -->
+
   <!-- =================== AUDIT TAB =================== -->
   <div class="main-panel" id="tab-audit" style="display:none;">
     <div class="card">
@@ -775,11 +887,14 @@ let enrollName = '';
 // Tab management
 // ==========================================================
 function showTab(tab) {
-  ['assistant','enroll','audit'].forEach(t => {
-    document.getElementById('tab-'+t).style.display = (t === tab) ? 'flex' : 'none';
-    document.getElementById('btn-'+t).classList.toggle('active', t === tab);
+  ['assistant','enroll','access','audit'].forEach(t => {
+    const el = document.getElementById('tab-'+t);
+    if (el) el.style.display = (t === tab) ? 'flex' : 'none';
+    const btn = document.getElementById('btn-'+t);
+    if (btn) btn.classList.toggle('active', t === tab);
   });
   if (tab === 'enroll') loadUsers();
+  if (tab === 'access') loadAccessControl();
   if (tab === 'audit')  loadAudit();
 }
 
@@ -1019,10 +1134,17 @@ async function textAsk() {
   await sendAsk(wavBlob, t);
 }
 
-async function sendAsk(wavBlob, transcript) {
+let pendingWavBlob = null;
+let pendingTranscript = '';
+
+async function sendAsk(wavBlob, transcript, pin = null) {
+  pendingWavBlob = wavBlob;
+  pendingTranscript = transcript;
+
   const fd = new FormData();
   fd.append('audio', wavBlob, 'audio.wav');
   fd.append('transcript', transcript);
+  if (pin) fd.append('pin', pin);
 
   try {
     const resp = await fetch('/api/ask', { method: 'POST', body: fd });
@@ -1036,23 +1158,183 @@ async function sendAsk(wavBlob, transcript) {
 }
 
 function handleAskResponse(data) {
+  // Update Policy Meta Badges
+  const metaRow = document.getElementById('policy-meta-row');
+  if (metaRow && data.tier !== undefined) {
+    metaRow.style.display = 'flex';
+    const tierPill = document.getElementById('badge-tier');
+    tierPill.textContent = `Tier ${data.tier} (${data.tier_name || ''})`;
+    tierPill.className = `policy-pill tier-pill tier-${data.tier}`;
+
+    const rolePill = document.getElementById('badge-role');
+    rolePill.textContent = `Role: ${(data.effective_role || 'guest').toUpperCase()}`;
+
+    const catPill = document.getElementById('badge-cat');
+    catPill.textContent = `Cat: ${(data.category || 'general').replace(/_/g, ' ').toUpperCase()}`;
+
+    const statusPill = document.getElementById('badge-status');
+    const isAllowed = data.policy_allowed || (data.granted && data.status === 'ALLOWED');
+    statusPill.textContent = isAllowed ? 'ALLOWED' : (data.requires_pin ? 'PIN REQUIRED' : 'DENIED');
+    statusPill.className = `policy-pill status-pill ${isAllowed ? 'allowed' : 'denied'}`;
+  }
+
+  // Handle PIN Challenge
+  const pinCard = document.getElementById('pin-challenge-card');
+  if (data.requires_pin) {
+    if (pinCard) pinCard.style.display = 'block';
+    setOrbState(OrbState.VERIFYING);
+    setBanner('verifying', '🔐 VOICE PIN REQUIRED', 'Speak or enter your 4-digit voice PIN to authorize.');
+    document.getElementById('reply-text').textContent = data.reply || 'Voice PIN required.';
+    document.getElementById('token-status').textContent = 'pending 2FA';
+    document.getElementById('token-status').style.color = 'var(--accent-amber)';
+    speakReply(data.reply);
+    setTimeout(() => { const inp = document.getElementById('voice-pin-input'); if (inp) inp.focus(); }, 150);
+    return;
+  } else {
+    if (pinCard) pinCard.style.display = 'none';
+  }
+
   if (data.granted) {
     setOrbState(OrbState.GRANTED);
-    setBanner('granted', `✅ ACCESS GRANTED — ${data.user}`, `Score: ${(data.score*100).toFixed(1)}%`);
+    setBanner('granted', `✅ ACCESS GRANTED — ${data.user}`, `Score: ${(data.score*100).toFixed(1)}% · ${data.reason || 'Authorized'}`);
     document.getElementById('reply-text').textContent = data.reply || '—';
     document.getElementById('token-status').textContent = 'issued';
     document.getElementById('token-status').style.color = 'var(--accent-green)';
     addMcpCalls(data.mcp_trace || []);
     speakReply(data.reply);
+  } else if (data.policy_allowed) {
+    // Guest allowed (e.g. Emergency, General info, Music, Timers)
+    setOrbState(OrbState.LISTENING);
+    setBanner('granted', `🌐 GUEST ALLOWED — ${(data.category || 'general').replace(/_/g, ' ').toUpperCase()}`, `Score: ${(data.score*100).toFixed(1)}% (Guest Policy)`);
+    document.getElementById('reply-text').textContent = data.reply || '—';
+    document.getElementById('token-status').textContent = 'guest (no MCP token)';
+    document.getElementById('token-status').style.color = 'var(--accent-cyan)';
+    speakReply(data.reply);
   } else {
     setOrbState(OrbState.DENIED);
-    setBanner('denied', '🚫 ACCESS DENIED', `Score: ${((data.score||0)*100).toFixed(1)}% — Voice not recognized`);
+    setBanner('denied', '🚫 ACCESS DENIED', `Score: ${((data.score||0)*100).toFixed(1)}% — ${data.reason || 'Restricted'}`);
     document.getElementById('reply-text').textContent = data.reply || 'Voice not recognized.';
     document.getElementById('token-status').textContent = 'none';
     document.getElementById('token-status').style.color = 'var(--text-dim)';
+    speakReply(data.reply);
   }
   // Reset orb after 4 seconds
   setTimeout(() => setOrbState(OrbState.IDLE), 4000);
+}
+
+function submitWithPin() {
+  const pin = document.getElementById('voice-pin-input').value.trim();
+  if (!pin) { toast('Please enter a voice PIN'); return; }
+  document.getElementById('pin-challenge-card').style.display = 'none';
+  if (pendingWavBlob && pendingTranscript) {
+    setOrbState(OrbState.VERIFYING);
+    setBanner('', 'Verifying voice PIN…', '');
+    sendAsk(pendingWavBlob, pendingTranscript, pin);
+  }
+}
+
+function cancelPinChallenge() {
+  document.getElementById('pin-challenge-card').style.display = 'none';
+  setOrbState(OrbState.IDLE);
+}
+
+// ==========================================================
+// Access Control Panel & Guest Permissions Management
+// ==========================================================
+const TIER_META = {
+  0: { label: "Tier 0", name: "Emergency", class: "tier-0", desc: "Always allowed for everyone. Confidence-exempt and never gated." },
+  1: { label: "Tier 1", name: "Guest Allowed", class: "tier-1", desc: "Allowed for guests by default (Music, Weather, News). Enrolled users can disable." },
+  2: { label: "Tier 2", name: "Guest Blocked", class: "tier-2", desc: "Blocked for guests by default (Smart Home, TV, Timers). Enrolled users can enable." },
+  3: { label: "Tier 3", name: "Enrolled Only", class: "tier-3", desc: "Enrolled only by default. Granting guest access requires confirmation / PIN with risk warning." },
+  4: { label: "Tier 4", name: "Restricted Admin", class: "tier-4", desc: "Enrolled-only, never grantable to guests. Requires high confidence + voice PIN." },
+};
+
+async function loadAccessControl() {
+  const grid = document.getElementById('access-grid');
+  if (!grid) return;
+  try {
+    const res = await fetch('/api/access-control/status');
+    const data = await res.json();
+    renderAccessGrid(data);
+  } catch(e) {
+    grid.innerHTML = '<div style="color:var(--accent-red)">Error loading access control rules: ' + e.message + '</div>';
+  }
+}
+
+function renderAccessGrid(data) {
+  const grid = document.getElementById('access-grid');
+  const perms = data.guest_permissions || {};
+  const tiers = data.tiers || {};
+
+  grid.innerHTML = Object.keys(perms).map(cat => {
+    const tierNum = tiers[cat] !== undefined ? tiers[cat] : 4;
+    const tierInfo = TIER_META[tierNum] || TIER_META[4];
+    const isAllowed = perms[cat];
+    const isImmutable = (tierNum === 0 || tierNum === 4 || cat === 'personal_data');
+    const title = cat.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+
+    return `
+      <div class="access-card">
+        <div>
+          <div class="access-card-head">
+            <span class="access-card-title">${title}</span>
+            <span class="access-card-tier ${tierInfo.class}">${tierInfo.label}</span>
+          </div>
+          <div class="access-card-desc">${tierInfo.desc}</div>
+        </div>
+        <div class="access-card-action">
+          <span style="font-size:0.75rem;font-weight:600;color:${isAllowed ? 'var(--accent-green)' : 'var(--text-dim)'}">
+            ${isAllowed ? 'Guest: ALLOWED' : 'Guest: BLOCKED'}
+          </span>
+          <label class="switch">
+            <input type="checkbox" ${isAllowed ? 'checked' : ''} ${isImmutable ? 'disabled' : ''} onchange="toggleCategory('${cat}', this.checked, ${tierNum})">
+            <span class="slider"></span>
+          </label>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+async function toggleCategory(cat, enabled, tierNum) {
+  let pin = prompt(`Enter enrolled user voice PIN to change ${cat.replace(/_/g, ' ')} permission:`, "1234");
+  if (!pin) { loadAccessControl(); return; }
+
+  let confirmed = false;
+  if (tierNum === 3 && enabled) {
+    confirmed = confirm(`WARNING: Granting guests access to ${cat} carries security risks. Do you confirm?`);
+    if (!confirmed) { loadAccessControl(); return; }
+  }
+
+  const fd = new FormData();
+  fd.append('category', cat);
+  fd.append('enabled', enabled);
+  fd.append('user', 'gauravi');
+  fd.append('pin', pin);
+  fd.append('confirmed', confirmed);
+
+  try {
+    const res = await fetch('/api/access-control/permission', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (res.ok) {
+      toast(data.message || 'Permission updated');
+    } else {
+      toast('Error: ' + (data.detail || 'Could not update'));
+    }
+  } catch(e) {
+    toast('Request failed: ' + e.message);
+  }
+  loadAccessControl();
+}
+
+async function resetPermissionsToDefault() {
+  let pin = prompt("Enter voice PIN to reset all guest permissions to standard defaults:", "1234");
+  if (!pin) return;
+  document.getElementById('transcript-input').value = "Reset guest permissions to default";
+  const silence = new Int16Array(16000);
+  const wav = buildWAV(silence, 16000);
+  await sendAsk(wav, "Reset guest permissions to default", pin);
+  loadAccessControl();
 }
 
 // ==========================================================
@@ -1273,6 +1555,7 @@ function renderAudit(events) {
 window.addEventListener('DOMContentLoaded', () => {
   fetchChallenge();
   loadUsers();
+  loadAccessControl();
 });
 </script>
 </body>

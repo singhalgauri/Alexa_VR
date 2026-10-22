@@ -37,6 +37,15 @@ from app.audit import log_event, recent_events  # noqa: E402
 from app.ratelimit import is_blocked, record_failure, record_success  # noqa: E402
 from app.tokens import mint_token  # noqa: E402
 from app.voice_gate import get_gate  # noqa: E402
+from access_control import (  # noqa: E402
+    PolicyEnforcementGate,
+    Role,
+    SensitivityTier,
+    SpeakerIdentificationResult,
+    CATEGORY_TIER_MAPPING,
+)
+
+policy_gate = PolicyEnforcementGate()
 
 MAX_UPLOAD_BYTES = 5 * 1024 * 1024  # 5 MB
 STATIC_DIR = Path(__file__).parent.parent / "static"
@@ -184,12 +193,14 @@ async def ask(
     request: Request,
     audio: UploadFile = File(...),
     transcript: str = Form(default=""),
+    pin: Optional[str] = Form(default=None),
+    confirmed: bool = Form(default=False),
 ):
     """
-    Verify the speaker, mint a token, call the MCP brain, return reply.
+    Verify the speaker, evaluate access control policy, mint token if permitted, return reply.
 
     Returns:
-      { granted, user, score, reply, mcp_trace }
+      { granted, user, effective_role, tier, tier_name, category, score, reply, mcp_trace, status, reason }
     """
     ip = _get_client_ip(request)
 
@@ -219,58 +230,164 @@ async def ask(
                     "mcp_trace": [],
                 })
 
-    # Voice verification
+    # 1. Voice verification against enrolled centroids
     gate = get_gate()
     result = gate.verify_any(audio_data)
+
+    speaker_id = result.user if result.granted else None
+    confidence = float(result.score)
+
+    if speaker_id:
+        policy_gate.policy_store._enrolled_users.add(speaker_id)
+
+    # 2. Package into SpeakerIdentificationResult
+    speaker_res = SpeakerIdentificationResult(
+        user_id=speaker_id,
+        confidence=confidence,
+        detected_speakers=[speaker_id] if speaker_id else ["guest"],
+        is_ambiguous=False,
+        is_live=True,
+    )
+
+    # 3. Policy Enforcement Gate evaluation
+    decision = policy_gate.process_request(
+        utterance=transcript,
+        speaker_result=speaker_res,
+        pin_attempt=pin,
+        confirmation=confirmed,
+    )
 
     log_event(
         granted=result.granted,
         ip=ip,
         user=result.user,
-        score=result.score,
+        score=confidence,
         query=transcript if result.granted else None,
     )
 
     if not result.granted:
         record_failure(ip)
+
+    # 4. If voice verified AND allowed by policy -> mint token and call MCP brain
+    if result.granted and decision.allowed:
+        record_success(ip)
+        token = mint_token(decision.speaker_id)
+        try:
+            import inspect
+            from app.assistant import ask as brain_ask
+            res = brain_ask(transcript, token)
+            if inspect.isawaitable(res):
+                brain_result = await res
+            else:
+                brain_result = res
+            final_reply = brain_result["reply"]
+            mcp_trace = brain_result.get("mcp_trace", [])
+        except Exception as exc:
+            final_reply = decision.response_message or f"Assistant error: {exc}"
+            mcp_trace = []
+
         return JSONResponse({
-            "granted": False,
-            "user": result.user,
-            "score": result.score,
-            "reply": (
-                "Voice not recognized. "
-                "Please enroll your voice first, or speak more clearly."
-            ),
-            "mcp_trace": [],
+            "granted": True,
+            "policy_allowed": True,
+            "user": decision.speaker_id,
+            "effective_role": decision.effective_role.value,
+            "tier": decision.tier.value,
+            "tier_name": decision.tier.name,
+            "category": decision.category,
+            "score": confidence,
+            "reply": final_reply,
+            "mcp_trace": mcp_trace,
+            "status": decision.status.value,
+            "requires_pin": decision.requires_second_factor,
+            "requires_confirm": decision.requires_confirmation,
+            "reason": decision.reason,
         })
 
-    record_success(ip)
-
-    # Mint a short-lived token for the MCP server
-    token = mint_token(result.user)
-
-    # Call the assistant brain (MCP client)
-    try:
-        import inspect
-        from app.assistant import ask as brain_ask  # local import to allow monkeypatching
-        res = brain_ask(transcript, token)
-        if inspect.isawaitable(res):
-            brain_result = await res
-        else:
-            brain_result = res
-    except Exception as exc:
-        brain_result = {
-            "reply": f"Assistant error: {exc}",
+    # 5. If voice NOT recognized but category is permitted for guests (e.g. Tier 0 emergency, Tier 1 weather/music)
+    if not result.granted and decision.allowed:
+        return JSONResponse({
+            "granted": False,
+            "policy_allowed": True,
+            "user": None,
+            "effective_role": "guest",
+            "tier": decision.tier.value,
+            "tier_name": decision.tier.name,
+            "category": decision.category,
+            "score": confidence,
+            "reply": decision.response_message,
             "mcp_trace": [],
-        }
+            "status": decision.status.value,
+            "requires_pin": False,
+            "requires_confirm": False,
+            "reason": decision.reason,
+        })
+
+    # 6. Blocked by policy (or guest blocked from enrolled-only / personal data)
+    reply = decision.response_message
+    if not result.granted and "not recognized" not in reply.lower():
+        reply = f"Voice not recognized. {reply}"
 
     return JSONResponse({
-        "granted": True,
-        "user": result.user,
-        "score": result.score,
-        "reply": brain_result["reply"],
-        "mcp_trace": brain_result["mcp_trace"],
+        "granted": False,
+        "policy_allowed": False,
+        "user": decision.speaker_id,
+        "effective_role": decision.effective_role.value,
+        "tier": decision.tier.value,
+        "tier_name": decision.tier.name,
+        "category": decision.category,
+        "score": confidence,
+        "reply": reply,
+        "mcp_trace": [],
+        "status": decision.status.value,
+        "requires_pin": decision.requires_second_factor,
+        "requires_confirm": decision.requires_confirmation,
+        "reason": decision.reason,
     })
+
+
+# ---------------------------------------------------------------------------
+# Access Control Management API
+# ---------------------------------------------------------------------------
+
+@app.get("/api/access-control/status")
+async def get_access_control_status():
+    """Returns current sensitivity tiers and guest permissions."""
+    summary = policy_gate.policy_store.get_guest_permissions_summary()
+    tiers = {cat: tier.value for cat, tier in CATEGORY_TIER_MAPPING.items()}
+    return {
+        "guest_permissions": summary,
+        "tiers": tiers,
+        "enrolled_users": list(policy_gate.policy_store._enrolled_users),
+        "thresholds": {
+            "normal": policy_gate.policy_store.threshold_normal,
+            "high": policy_gate.policy_store.threshold_high,
+            "very_high": policy_gate.policy_store.threshold_very_high,
+        },
+    }
+
+
+@app.post("/api/access-control/permission")
+async def update_guest_permission(
+    category: str = Form(...),
+    enabled: bool = Form(...),
+    user: str = Form(default=""),
+    pin: str = Form(default=""),
+    confirmed: bool = Form(default=False),
+):
+    """Updates guest access for a category (requires Tier 4 voice PIN)."""
+    if not user or not pin:
+        raise HTTPException(401, "Enrolled user identity and voice PIN are required to change permissions.")
+    if not policy_gate.second_factor_verifier.verify_pin(user, pin):
+        raise HTTPException(403, "Invalid voice PIN.")
+
+    success, msg = policy_gate.policy_store.set_guest_permission(category, enabled, confirmed=confirmed)
+    if not success:
+        raise HTTPException(400, msg)
+    return {
+        "status": "updated",
+        "message": msg,
+        "permissions": policy_gate.policy_store.get_guest_permissions_summary(),
+    }
 
 
 # ---------------------------------------------------------------------------
