@@ -48,6 +48,18 @@ from access_control import (  # noqa: E402
 
 policy_gate = PolicyEnforcementGate()
 
+# Sync voiceprint files with policy store enrolled users on startup
+try:
+    from pathlib import Path as _P
+    _vp_dir = _P(os.environ.get("VOICEGATE_DATA", os.environ.get("VOICEPRINTS_DIR", "voiceprints")))
+    if _vp_dir.exists():
+        for _npy in _vp_dir.glob("*.npy"):
+            _uname = _npy.stem.lower()
+            policy_gate.policy_store._enrolled_users.add(_uname)
+        policy_gate.policy_store.save()
+except Exception:
+    pass
+
 MAX_UPLOAD_BYTES = 5 * 1024 * 1024  # 5 MB
 STATIC_DIR = Path(__file__).parent.parent / "static"
 
@@ -62,7 +74,7 @@ _CHALLENGE_PHRASES = [
     "green light steady",
     "winter fox jumps",
     "lambda token gate",
-    "voice is the key",
+    "voice is key",
 ]
 
 LIVENESS_ENABLED: bool = os.environ.get("VOICEGATE_LIVENESS", "0") == "1"

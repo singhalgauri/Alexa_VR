@@ -235,10 +235,14 @@ class PolicyStore:
     def is_enrolled_user(self, user_id: Optional[str]) -> bool:
         if not user_id:
             return False
-        return user_id in self._enrolled_users
+        return user_id.lower() in {u.lower() for u in self._enrolled_users}
 
     def verify_user_pin(self, user_id: str, pin: str) -> bool:
-        stored = self._user_pins.get(user_id)
+        uid = user_id.strip().lower()
+        stored = self._user_pins.get(uid)
+        if not stored:
+            # Try original casing as fallback
+            stored = self._user_pins.get(user_id)
         if not stored:
             return False
         return str(stored).strip() == str(pin).strip()

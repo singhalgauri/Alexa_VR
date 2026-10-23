@@ -114,29 +114,195 @@ class _EmbedderWrapper:
                 emb = self._model.encode_batch(waveform)  # (1, 1, 192)
             vec = emb.squeeze().cpu().numpy().astype(np.float32)
         else:
-            # Acoustic filterbank feature extraction (NumPy + SciPy)
+            # High-precision acoustic embedding with speaker-discriminative features
+            # Uses MFCC-like DCT, delta coefficients, pitch estimation, and
+            # spectral dynamics to capture vocal tract characteristics unique to
+            # each speaker, unlike simple spectrogram statistics.
             import scipy.signal
+            from scipy.fft import dct
 
             if sr != 16000:
                 data = scipy.signal.resample_poly(data, 16000, sr).astype(np.float32)
                 sr = 16000
 
-            f, t, Sxx = scipy.signal.spectrogram(data, fs=sr, nperseg=512, noverlap=256)
-            n_bands = 64
-            band_size = max(1, Sxx.shape[0] // n_bands)
-            bands = []
-            for b in range(n_bands):
-                start = b * band_size
-                end = min(Sxx.shape[0], (b + 1) * band_size)
-                band_power = np.mean(Sxx[start:end, :], axis=0) if start < end else np.zeros(Sxx.shape[1])
-                log_e = np.log1p(band_power)
-                bands.append([
-                    float(np.mean(log_e)),
-                    float(np.std(log_e)),
-                    float(np.percentile(log_e, 75) - np.percentile(log_e, 25)),
-                ])
+            # --- 1. Mel-scale filterbank log-energies (MFCC-like) ---
+            n_fft = 512
+            hop = 256
+            f, t_axis, Sxx = scipy.signal.spectrogram(
+                data, fs=sr, nperseg=n_fft, noverlap=n_fft - hop,
+                window="hann", mode="magnitude",
+            )
+            # Apply mel-scale triangular filterbank (40 filters)
+            n_mels = 40
+            mel_low = 2595.0 * np.log10(1.0 + 0.0 / 700.0)
+            mel_high = 2595.0 * np.log10(1.0 + (sr / 2.0) / 700.0)
+            mel_pts = np.linspace(mel_low, mel_high, n_mels + 2)
+            hz_pts = 700.0 * (10.0 ** (mel_pts / 2595.0) - 1.0)
+            bin_pts = np.floor((n_fft + 1) * hz_pts / sr).astype(int)
+            bin_pts = np.clip(bin_pts, 0, Sxx.shape[0] - 1)
 
-            vec = np.array(bands, dtype=np.float32).flatten()[:192]
+            mel_fb = np.zeros((n_mels, Sxx.shape[0]), dtype=np.float32)
+            for m_idx in range(n_mels):
+                left, center, right = bin_pts[m_idx], bin_pts[m_idx + 1], bin_pts[m_idx + 2]
+                if center > left:
+                    mel_fb[m_idx, left:center] = np.linspace(0, 1, center - left, endpoint=False)
+                if right > center:
+                    mel_fb[m_idx, center:right] = np.linspace(1, 0, right - center, endpoint=False)
+
+            mel_spec = mel_fb @ Sxx  # (n_mels, n_frames)
+            log_mel = np.log1p(mel_spec + 1e-10)
+
+            # DCT to get MFCC-like coefficients (13 cepstral coefficients per frame)
+            n_ceps = 13
+            mfcc = dct(log_mel, type=2, axis=0, norm="ortho")[:n_ceps, :]  # (13, n_frames)
+
+            # --- 2. Delta and acceleration coefficients ---
+            def _delta(feat: np.ndarray, width: int = 2) -> np.ndarray:
+                padded = np.pad(feat, ((0, 0), (width, width)), mode="edge")
+                delta = np.zeros_like(feat)
+                denom = 2.0 * sum(n * n for n in range(1, width + 1))
+                if denom == 0:
+                    return delta
+                for n in range(1, width + 1):
+                    delta += n * (padded[:, width + n:width + n + feat.shape[1]]
+                                  - padded[:, width - n:width - n + feat.shape[1]])
+                return delta / denom
+
+            delta_mfcc = _delta(mfcc)
+            accel_mfcc = _delta(delta_mfcc)
+
+            # MFCC statistics: mean + std for each of 13 coefficients = 26 features
+            mfcc_stats = np.concatenate([
+                np.mean(mfcc, axis=1), np.std(mfcc, axis=1),
+            ])  # 26
+
+            # Delta statistics: mean + std = 26 features
+            delta_stats = np.concatenate([
+                np.mean(delta_mfcc, axis=1), np.std(delta_mfcc, axis=1),
+            ])  # 26
+
+            # Acceleration statistics: mean + std = 26 features
+            accel_stats = np.concatenate([
+                np.mean(accel_mfcc, axis=1), np.std(accel_mfcc, axis=1),
+            ])  # 26
+
+            # --- 3. Pitch (F0) estimation via autocorrelation ---
+            frame_len = int(0.03 * sr)  # 30ms frames
+            frame_hop = int(0.01 * sr)  # 10ms hop
+            pitches = []
+            for start_idx in range(0, len(data) - frame_len, frame_hop):
+                frame = data[start_idx:start_idx + frame_len]
+                frame = frame * np.hanning(len(frame))
+                corr = np.correlate(frame, frame, mode="full")
+                corr = corr[len(corr) // 2:]
+                # Search for pitch between 60Hz and 500Hz
+                min_lag = int(sr / 500)
+                max_lag = min(int(sr / 60), len(corr) - 1)
+                if max_lag > min_lag and len(corr) > max_lag:
+                    search = corr[min_lag:max_lag]
+                    if len(search) > 0 and np.max(search) > 0.2 * corr[0]:
+                        best_lag = np.argmax(search) + min_lag
+                        if best_lag > 0:
+                            pitches.append(sr / best_lag)
+
+            if pitches:
+                pitch_arr = np.array(pitches, dtype=np.float32)
+                pitch_features = np.array([
+                    np.mean(pitch_arr), np.std(pitch_arr),
+                    np.median(pitch_arr),
+                    np.percentile(pitch_arr, 10), np.percentile(pitch_arr, 90),
+                    float(len(pitch_arr)) / max(1, len(data) // frame_hop),  # voicing ratio
+                ], dtype=np.float32)
+            else:
+                pitch_features = np.zeros(6, dtype=np.float32)
+            # 6 features
+
+            # --- 4. Spectral shape features (per-frame centroid, rolloff, flux) ---
+            freqs = f
+            spectral_centroids = []
+            spectral_rolloffs = []
+            spectral_flux = []
+            for col in range(Sxx.shape[1]):
+                mag = Sxx[:, col]
+                total = np.sum(mag)
+                if total > 0:
+                    centroid = np.sum(freqs * mag) / total
+                    spectral_centroids.append(centroid)
+                    cumsum = np.cumsum(mag)
+                    rolloff_idx = np.searchsorted(cumsum, 0.85 * total)
+                    spectral_rolloffs.append(freqs[min(rolloff_idx, len(freqs) - 1)])
+                else:
+                    spectral_centroids.append(0.0)
+                    spectral_rolloffs.append(0.0)
+                if col > 0:
+                    prev_mag = Sxx[:, col - 1]
+                    flux = np.sqrt(np.mean((mag - prev_mag) ** 2))
+                    spectral_flux.append(flux)
+
+            sc = np.array(spectral_centroids, dtype=np.float32)
+            sr_arr = np.array(spectral_rolloffs, dtype=np.float32)
+            sf = np.array(spectral_flux, dtype=np.float32) if spectral_flux else np.zeros(1, dtype=np.float32)
+
+            spectral_shape = np.array([
+                np.mean(sc), np.std(sc), np.median(sc),
+                np.mean(sr_arr), np.std(sr_arr), np.median(sr_arr),
+                np.mean(sf), np.std(sf),
+            ], dtype=np.float32)  # 8 features
+
+            # --- 5. Energy dynamics ---
+            frame_energies = np.array([
+                np.sum(data[i:i + frame_len] ** 2)
+                for i in range(0, len(data) - frame_len, frame_hop)
+            ], dtype=np.float32)
+            if len(frame_energies) > 0:
+                log_energy = np.log1p(frame_energies)
+                energy_feats = np.array([
+                    np.mean(log_energy), np.std(log_energy),
+                    np.percentile(log_energy, 10), np.percentile(log_energy, 90),
+                ], dtype=np.float32)
+            else:
+                energy_feats = np.zeros(4, dtype=np.float32)
+            # 4 features
+
+            # --- 6. Mel-band statistics for formant-proxying ---
+            # Focus on formant-region bands (300Hz-3500Hz → roughly mel bands 5-30)
+            formant_bands = log_mel[5:30, :]  # 25 bands
+            formant_stats = np.concatenate([
+                np.mean(formant_bands, axis=1),  # 25
+                np.std(formant_bands, axis=1),   # 25
+            ])  # 50 features
+
+            # --- 7. Log-mel band covariance (speaker texture) ---
+            # Capture cross-band correlations that are unique to vocal tract shape
+            if log_mel.shape[1] > 2:
+                # Sub-sample bands to keep feature count manageable
+                sel_bands = log_mel[::3, :]  # ~13 bands
+                cov = np.corrcoef(sel_bands)
+                # Upper triangle of correlation matrix
+                upper_tri = cov[np.triu_indices(cov.shape[0], k=1)]
+                cov_feats = upper_tri[:36].astype(np.float32)  # cap at 36
+                if len(cov_feats) < 36:
+                    cov_feats = np.pad(cov_feats, (0, 36 - len(cov_feats)))
+            else:
+                cov_feats = np.zeros(36, dtype=np.float32)
+            # 36 features
+
+            # --- Concatenate all features → 192-D ---
+            # 26 + 26 + 26 + 6 + 8 + 4 + 50 + 36 = 182; pad to 192
+            all_feats = np.concatenate([
+                mfcc_stats,       # 26
+                delta_stats,      # 26
+                accel_stats,      # 26
+                pitch_features,   # 6
+                spectral_shape,   # 8
+                energy_feats,     # 4
+                formant_stats,    # 50
+                cov_feats,        # 36
+            ])
+            # Pad or trim to exactly 192
+            if len(all_feats) < 192:
+                all_feats = np.pad(all_feats, (0, 192 - len(all_feats)))
+            vec = all_feats[:192].astype(np.float32)
 
         norm = np.linalg.norm(vec)
         if norm > 0:

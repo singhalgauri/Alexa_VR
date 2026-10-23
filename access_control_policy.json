@@ -7,11 +7,13 @@
     "video_tv": false,
     "generic_timers": false,
     "third_party_skills": false,
-    "communication": true,
+    "communication": false,
     "home_security": false,
     "shopping": false,
     "routines": false,
     "kids_family": false,
+    "calendar_schedule": false,
+    "reminders": false,
     "payments_banking": false,
     "food_ride_ordering": false,
     "device_account_settings": false,
@@ -20,20 +22,21 @@
   },
   "third_party_allowlist": [
     "daily_quote",
-    "trivia_time",
-    "calm_meditation"
+    "calm_meditation",
+    "trivia_time"
   ],
   "user_pins": {
     "gauravi": "1234",
     "john": "4321",
-    "alice": "9999"
+    "alice": "9999",
+    "gauri": "4569"
   },
   "enrolled_users": [
-    "gauravi",
+    "john",
     "alice",
-    "G",
-    "p",
-    "john"
+    "gauri",
+    "Gauri",
+    "gauravi"
   ],
   "threshold_normal": 0.4,
   "threshold_high": 0.65,

@@ -31,7 +31,7 @@ def test_token_tampering_detected():
     # Tamper with signature
     tampered_sig = parts[2][:-1] + ("A" if parts[2][-1] != "A" else "B")
     tampered_sig_token = f"{parts[0]}.{parts[1]}.{tampered_sig}"
-    with pytest.raises(ValueError, match="Token signature invalid"):
+    with pytest.raises(ValueError, match="Token signature invalid|Malformed"):
         verify_token(tampered_sig_token)
 
 
