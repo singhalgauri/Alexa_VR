@@ -308,3 +308,24 @@ class PolicyStore:
     def remove_allowed_skill(self, skill_name: str) -> None:
         self._third_party_allowlist.discard(skill_name.strip().lower())
         self.save()
+
+    def enroll_user(self, user_id: str) -> None:
+        """Registers a user in the enrolled set and persists."""
+        self._enrolled_users.add(user_id.strip().lower())
+        self.save()
+
+    def set_user_pin(self, user_id: str, pin: str) -> Tuple[bool, str]:
+        """
+        Stores or updates the voice PIN for an enrolled user.
+
+        Rules:
+            - PIN must be 4–8 digits (digits only).
+            - Returns (success, message).
+        """
+        pin = str(pin).strip()
+        if not pin.isdigit() or not (4 <= len(pin) <= 8):
+            return False, "PIN must be 4–8 digits (numbers only)."
+        uid = user_id.strip().lower()
+        self._user_pins[uid] = pin
+        self.save()
+        return True, f"PIN set for user '{uid}'."

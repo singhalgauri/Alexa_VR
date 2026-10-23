@@ -24,6 +24,7 @@ import os
 import struct
 import sys
 from pathlib import Path
+from typing import Optional
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -121,9 +122,15 @@ if STATIC_DIR.exists():
 async def enroll(
     name: str = Form(...),
     consent: bool = Form(default=True),
+    pin: Optional[str] = Form(default=None),
     clips: list[UploadFile] = File(...),
 ):
-    """Enroll a voice: requires consent, ≥3 WAV clips, and a valid user name."""
+    """Enroll a voice: requires consent, ≥3 WAV clips, and a valid user name.
+    
+    Optionally accepts a 4-8 digit numeric PIN that is stored in PolicyStore
+    and used as a second-factor for sensitive operations and guest permission
+    grants.
+    """
     if not consent:
         raise HTTPException(400, "Consent is required to store voice biometric data")
 
@@ -154,7 +161,21 @@ async def enroll(
         traceback.print_exc()
         raise HTTPException(500, f"Enrollment error: {exc}")
 
-    return {"status": "enrolled", "user": name, "clips": len(wav_bytes_list)}
+    # Register the user in PolicyStore so downstream policy checks recognise them
+    policy_gate.policy_store.enroll_user(name)
+
+    # Persist the PIN if one was provided
+    pin_status: Optional[str] = None
+    if pin is not None:
+        ok, msg = policy_gate.policy_store.set_user_pin(name, pin)
+        pin_status = msg if ok else f"PIN not saved: {msg}"
+
+    result: dict = {"status": "enrolled", "user": name, "clips": len(wav_bytes_list)}
+    if pin_status:
+        result["pin_status"] = pin_status
+    else:
+        result["pin_status"] = "No PIN provided — you can set one from the Access Control panel."
+    return result
 
 
 # ---------------------------------------------------------------------------

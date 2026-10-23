@@ -7,7 +7,7 @@
     "video_tv": false,
     "generic_timers": false,
     "third_party_skills": false,
-    "communication": false,
+    "communication": true,
     "home_security": false,
     "shopping": false,
     "routines": false,
