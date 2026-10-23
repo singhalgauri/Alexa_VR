@@ -69,9 +69,9 @@ def get_next_event(owner: str = "") -> str:
 
 
 @mcp.tool()
-def add_event(title: str, when: str, time_str: str = "") -> str:
-    """Add a calendar event. title: event name. when: YYYY-MM-DD. time_str: HH:MM (optional)."""
-    return tools.add_event(title, when, time_str)
+def add_event(title: str, when: str, time_str: str = "", owner: str = "") -> str:
+    """Add a calendar event. title: event name. when: YYYY-MM-DD. time_str: HH:MM (optional). owner: optional other user's name."""
+    return tools.add_event(title, when, time_str, owner)
 
 
 # --- Reminder tools ---

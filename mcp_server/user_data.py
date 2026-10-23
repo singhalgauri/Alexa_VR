@@ -110,6 +110,8 @@ def get_schedule(user: str, day: Optional[str] = None) -> list[dict]:
 
 def add_event(user: str, title: str, when: str, time_str: str = "", description: str = "") -> dict:
     """Add a schedule event. 'when' is YYYY-MM-DD."""
+    if not when:
+        when = date.today().isoformat()
     event = {
         "title": title,
         "date": when,

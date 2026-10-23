@@ -44,15 +44,50 @@ def register_enrolled_users(names: set[str]) -> None:
 
 
 def _get_enrolled_names() -> set[str]:
-    """Get enrolled user names, refreshing from policy store if empty."""
-    if not _ENROLLED_NAMES:
-        try:
-            from access_control.policy_store import PolicyStore
-            store = PolicyStore()
-            for u in store._enrolled_users:
-                _ENROLLED_NAMES.add(u.lower())
-        except Exception:
-            pass
+    """
+    Get enrolled user names across all sources:
+      1. Explicitly registered names
+      2. Voiceprints on disk (voiceprints/*.npy and voiceprints/*.profile.json)
+      3. User data store on disk (data/*.json)
+      4. Policy store enrolled users (access_control_policy.json)
+    """
+    global _ENROLLED_NAMES
+    names = set(_ENROLLED_NAMES)
+
+    # 1. Voiceprints directory
+    try:
+        from pathlib import Path
+        vp_dir = Path(os.environ.get("VOICEGATE_DATA", os.environ.get("VOICEPRINTS_DIR", "voiceprints")))
+        if vp_dir.exists():
+            for p in vp_dir.glob("*.npy"):
+                names.add(p.stem.lower())
+            for p in vp_dir.glob("*.profile.json"):
+                names.add(p.stem.split(".")[0].lower())
+    except Exception:
+        pass
+
+    # 2. User data directory
+    try:
+        from pathlib import Path
+        data_dir = Path(os.environ.get("VOICEGATE_USER_DATA_DIR", "data"))
+        if data_dir.exists():
+            for p in data_dir.glob("*.json"):
+                stem = p.stem.lower()
+                if not stem.startswith("_"):
+                    names.add(stem)
+    except Exception:
+        pass
+
+    # 3. Policy store
+    try:
+        from access_control.policy_store import PolicyStore
+        store = PolicyStore()
+        for u in store._enrolled_users:
+            names.add(u.lower())
+    except Exception:
+        pass
+
+    _ENROLLED_NAMES.update(names)
     return _ENROLLED_NAMES
 
 
@@ -109,24 +144,59 @@ def _detect_other_user(text: str) -> Optional[str]:
     """
     Detect if the transcript references another enrolled user's data.
     Returns the user name (lowercase) or None.
-    Examples: "what's Rahul's schedule", "add milk to Priya's shopping list"
+    Examples:
+      - "what's Rahul's schedule" -> "rahul"
+      - "what is the schedule of Rahul" -> "rahul"
+      - "schedule for Rahul" -> "rahul"
+      - "what is Rahul schedule" -> "rahul"
+      - "what does Rahul have scheduled" -> "rahul"
+      - "add milk to Priya's shopping list" -> "priya"
     """
     t = text.lower()
     enrolled = _get_enrolled_names()
+    stopwords = {"my", "the", "today", "tomorrow", "yesterday", "your", "a", "an", "this", "next", "our", "their", "his", "her"}
 
-    # Pattern: <name>'s <data_type>
-    m = re.search(r"\b([a-z]+)(?:'s|s')\s+(schedule|calendar|shopping|reminders?|list|events?|routines?)", t)
+    # Pattern 1: <name>'s <data_type> or <name>s' <data_type>
+    m = re.search(r"\b([a-z0-9_-]+)(?:'s|s')\s+(schedule|calendar|shopping|reminders?|lists?|events?|routines?|agenda)", t)
     if m:
-        candidate = m.group(1)
-        if candidate in enrolled and candidate not in {"my", "the", "today", "tomorrow", "your"}:
-            return candidate
+        cand = m.group(1).lower()
+        if cand in enrolled and cand not in stopwords:
+            return cand
 
-    # Pattern: "to <name>'s" (e.g. "add milk to priya's list")
-    m = re.search(r"\bto\s+([a-z]+)(?:'s|s')\s+(shopping|list|reminders?)", t)
+    # Pattern 2: "to <name>'s" (e.g. "add milk to priya's list")
+    m = re.search(r"\bto\s+([a-z0-9_-]+)(?:'s|s')\s+(shopping|list|reminders?|schedules?|calendar)", t)
     if m:
-        candidate = m.group(1)
-        if candidate in enrolled:
-            return candidate
+        cand = m.group(1).lower()
+        if cand in enrolled and cand not in stopwords:
+            return cand
+
+    # Pattern 3: <data_type> of/for <name> (e.g. "schedule of rahul", "schedule for rahul", "calendar of priya")
+    m = re.search(r"\b(schedules?|calendar|agenda|events?|reminders?|shopping\s+list|lists?)\s+(?:of|for)\s+([a-z0-9_-]+)\b", t)
+    if m:
+        cand = m.group(2).lower()
+        if cand in enrolled and cand not in stopwords:
+            return cand
+
+    # Pattern 4: <name> <data_type> (e.g. "rahul schedule", "what is rahul schedule", "check priya calendar")
+    m = re.search(r"\b([a-z0-9_-]+)\s+(schedules?|calendar|agenda|events?|reminders?|shopping\s+list|lists?)\b", t)
+    if m:
+        cand = m.group(1).lower()
+        if cand in enrolled and cand not in stopwords:
+            return cand
+
+    # Pattern 5: "scheduled for <name>" or "planned for <name>"
+    m = re.search(r"\b(?:scheduled|planned|happening)\s+for\s+([a-z0-9_-]+)\b", t)
+    if m:
+        cand = m.group(1).lower()
+        if cand in enrolled and cand not in stopwords:
+            return cand
+
+    # Pattern 6: "does <name> have" (e.g. "what does rahul have scheduled")
+    m = re.search(r"\b(?:does|do)\s+([a-z0-9_-]+)\s+have\b", t)
+    if m:
+        cand = m.group(1).lower()
+        if cand in enrolled and cand not in stopwords:
+            return cand
 
     return None
 
@@ -140,22 +210,134 @@ _TIME_RE = re.compile(r"\b(what('?s| is) (the )?time|time is it|current time)\b"
 
 # Schedule / calendar
 _SCHEDULE_RE = re.compile(
-    r"\b(what('?s| is)( on)?( my| \w+'s)?\s*(schedule|calendar|agenda|events?)|"
-    r"show( me)?( my| \w+'s)?\s*(schedule|calendar|events?)|"
-    r"(do i have|any) (events?|meetings?|appointments?)|"
-    r"what('?s| is) (happening|planned|coming up))\b",
+    r"^\s*(my\s+|the\s+|\w+\s+)?(schedules?|calendar|agenda)(\s+(of|for)\s+\w+)?(\s+(for\s+)?(today|tomorrow|yesterday|this week|next week|[a-z]+day))?\s*$"
+    r"|"
+    r"^\s*\w+('s|s')?\s+(schedules?|calendar|agenda|events?)(\s+(for\s+)?(today|tomorrow|yesterday|[a-z]+day))?\s*$"
+    r"|"
+    r"\b(what('?s| is| are)\s+(on\s+)?(\w+'s\s+|my\s+|the\s+|\w+\s+)?(schedules?|calendar|agenda|events?|meetings?|appointments?|plans?))\b"
+    r"|"
+    r"\b(show|tell|check|read|get|view|give)( me)?\s+(\w+'s\s+|my\s+|the\s+|\w+\s+)?(schedules?|calendar|agenda|events?|meetings?|appointments?)\b"
+    r"|"
+    r"\b(what\s+(?:do\s+i|does\s+\w+|do\s+\w+)\s+have(\s+(?:scheduled|planned|going on|on\s+schedule|today|tomorrow))?)\b"
+    r"|"
+    r"\b(what'?s happening|what is happening|what'?s planned|what is planned|what'?s coming up|what is coming up|what'?s scheduled|what is scheduled)\b"
+    r"|"
+    r"\b(do i have|does\s+\w+\s+have|any|are there any)\s+(events?|meetings?|appointments?|plans?)\b",
     re.I,
 )
+
 _NEXT_EVENT_RE = re.compile(
-    r"\b(what('?s| is)( my)?\s*next (event|meeting|appointment)|"
-    r"next (event|meeting|appointment|thing on my))\b",
+    r"\b(what('?s| is)(\s+(my|\w+'s|\w+))?\s*next\s+(event|meeting|appointment|thing\s+on\s+my\s+schedule)|"
+    r"next\s+(event|meeting|appointment|thing\s+on\s+my)|"
+    r"(my|\w+'s|\w+)\s+next\s+(event|meeting|appointment))\b",
     re.I,
 )
+
 _ADD_EVENT_RE = re.compile(
-    r"\b(add|schedule|create|put)\s+(a\s+)?(event|meeting|appointment)\s+"
-    r"(called |named |titled )?(?P<title>.+?)(\s+(on|for|at)\s+(?P<when>.+))?$",
+    r"\b(add|put)\s+(.+?)\s+(to|on|in)\s+(\w+'s\s+|my\s+)?(schedules?|calendar)\b"
+    r"|"
+    r"\b(add|put)\s+(to|on|in)\s+(\w+'s\s+|my\s+)?(schedules?|calendar)\b"
+    r"|"
+    r"\b(schedule|book|set\s+up)\s+(an?\s+)?(event|meeting|appointment|call|session|interview|lunch|dinner|sync)\b"
+    r"|"
+    r"\b(schedule|book|set\s+up)\s+([a-z0-9_]+(?:\s+[a-z0-9_]+)*)\s+(on|at|for|tomorrow|today|this|next|[a-z]+day)\b"
+    r"|"
+    r"\b(add|create)\s+(an?\s+)?(event|meeting|appointment|call|session|interview)\b"
+    r"|"
+    r"\b(set\s+(a\s+)?(schedules?|calendar\s+entry)\s+for\b)",
     re.I,
 )
+
+
+def _extract_time(text: str) -> tuple[str, str]:
+    """Extract time string and the matched substring from *text*."""
+    t = text.lower()
+    patterns = [
+        r"\b(?:at|for)\s+(\d{1,2}:\d{2}\s*(?:am|pm)?)\b",
+        r"\b(?:at|for)\s+(\d{1,2}\s*(?:am|pm))\b",
+        r"\b(\d{1,2}:\d{2}\s*(?:am|pm)?)\b",
+        r"\b(\d{1,2}\s*(?:am|pm))\b",
+        r"\b(?:at|for)\s+(\d{1,2})\b",
+    ]
+    for pat in patterns:
+        m = re.search(pat, t)
+        if m:
+            raw = m.group(1).strip()
+            tm = re.match(r"^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$", raw)
+            if tm:
+                hr = int(tm.group(1))
+                mn = int(tm.group(2) or 0)
+                meridiem = tm.group(3)
+                if meridiem == "pm" and hr < 12:
+                    hr += 12
+                elif meridiem == "am" and hr == 12:
+                    hr = 0
+                return f"{hr:02d}:{mn:02d}", m.group(0)
+            return raw, m.group(0)
+    return "", ""
+
+
+def _parse_add_event(text: str, other_user: str = "") -> tuple[str, str, str]:
+    """
+    Parse an add-event/schedule request into (title, when, time_str).
+    when: YYYY-MM-DD (defaults to today if no date in transcript)
+    time_str: HH:MM or speakable time string (or empty)
+    """
+    t = text.strip()
+    resolved_date = _resolve_date(t) or date.today().isoformat()
+    time_str, time_match_text = _extract_time(t)
+
+    work = t
+    if time_match_text:
+        work = re.sub(re.escape(time_match_text), "", work, flags=re.I)
+
+    date_patterns = [
+        r"\btomorrow\b", r"\btoday\b", r"\byesterday\b",
+        r"\bthis morning\b", r"\bthis afternoon\b", r"\bthis evening\b",
+        r"\b(on\s+|next\s+|this\s+)?(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b",
+        r"\b\d{4}-\d{2}-\d{2}\b",
+    ]
+    for dp in date_patterns:
+        work = re.sub(dp, "", work, flags=re.I)
+
+    # Remove schedule destination e.g. 'to my schedule', 'on my schedule'
+    work = re.sub(r"\b(to|on|in)\s+(\w+'s\s+|my\s+)?(schedules?|calendar)\b", "", work, flags=re.I)
+
+    strip_triggers = [
+        r"^\s*(please\s+)?(add|schedule|create|put|set|book)\b",
+        r"^\s*(to|on|in)\s+(\w+'s\s+|my\s+)?(schedules?|calendar)\b",
+        r"^\s*(an?|the)\s+(schedules?|calendar\s+entry)\s*(for)?\b",
+        r"^\s*(schedules?|calendar\s+entry)\s*(for)?\b",
+        r"^\s*(an?|the)\s+(event|meeting|appointment|call|session|interview)\s+(called|named|titled)\b",
+        r"^\s*(event|meeting|appointment|call|session|interview)\s+(called|named|titled)\b",
+        r"^\s*(called|named|titled)\b",
+        r"^\s*(for|on|at)\s+",
+    ]
+    changed = True
+    while changed:
+        changed = False
+        for st in strip_triggers:
+            new_work = re.sub(st, "", work, flags=re.I).strip()
+            if new_work != work:
+                work = new_work
+                changed = True
+
+    m = re.match(r"^\s*(an?|the)\s+(event|meeting|appointment|session|interview)\s+(.+)$", work, flags=re.I)
+    if m and not m.group(3).lower().startswith("with"):
+        work = m.group(3)
+
+    work = re.sub(r"^\s*(an?|the)\s+", "", work, flags=re.I)
+    work = re.sub(r"\s+(for|on|at|to)\s*$", "", work, flags=re.I).strip(".!? ,")
+
+    if not work or work.lower() in {"a", "an", "the"}:
+        for word in ["meeting", "appointment", "call", "session", "interview", "lunch", "dinner", "event"]:
+            if word in t.lower():
+                work = word.capitalize()
+                break
+        else:
+            work = "Event"
+
+    return work.title(), resolved_date, time_str
 
 # Reminders
 _REMINDER_ADD_RE = re.compile(
@@ -258,15 +440,12 @@ def _route(transcript: str) -> tuple[str, dict[str, Any]]:
             args["owner"] = other_user
         return "get_schedule", args
 
-    m = _ADD_EVENT_RE.search(t)
-    if m:
-        title = m.group("title").strip(".!? ")
-        when_raw = m.group("when") or ""
-        when = _resolve_date(when_raw) if when_raw else date.today().isoformat()
-        # Try to extract time
-        time_match = re.search(r"\b(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\b", when_raw, re.I)
-        time_str = time_match.group(1) if time_match else ""
-        return "add_event", {"title": title, "when": when, "time_str": time_str}
+    if _ADD_EVENT_RE.search(t):
+        title, when, time_str = _parse_add_event(t, other_user or "")
+        args = {"title": title, "when": when, "time_str": time_str}
+        if other_user:
+            args["owner"] = other_user
+        return "add_event", args
 
     # Shopping list
     m = _SHOPPING_ADD_RE.search(t)

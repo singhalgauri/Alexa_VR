@@ -141,6 +141,12 @@ async def enroll(
 
     try:
         gate.enroll(name, wav_bytes_list)
+        policy_gate.policy_store._enrolled_users.add(name.lower())
+        try:
+            from app.assistant import register_enrolled_users
+            register_enrolled_users({name.lower()})
+        except Exception:
+            pass
     except ValueError as exc:
         raise HTTPException(400, str(exc))
     except Exception as exc:
