@@ -44,3 +44,16 @@ Alexa+ introduces agentic abilities powered by external tools, skills, and Model
 ### Decision 6: Explicit Simulation Notice
 - **Choice**: The application is explicitly architected and presented as a **simulated Alexa+ experience**.
 - **Rationale**: Production Alexa hardware does on-device acoustic preprocessing and cloud-side ASR/TTS. Injecting raw PCM WAV buffers into a custom speaker-recognition gate requires audio pipeline access that the real proprietary Alexa OS does not currently expose to third-party skills. A full-fidelity web simulation with real MCP tooling accurately demonstrates the end-to-end architecture.
+
+### Decision 7: Per-User Personal Data Isolation & Relative Date Resolving (Feature A)
+- **Choice**: Store schedule events, reminders, shopping lists, custom routines, and profiles in isolated per-user JSON documents (`data/<user>.json`), with directory gitignored and zero raw audio persistence.
+- **Identity Integrity**: Tool invocations strictly retrieve identity from the authenticated `current_user` ContextVar set by `BearerTokenMiddleware`. Identity is never accepted as an untrusted tool parameter from the LLM or client.
+- **Dynamic Relative Dates**: Schedule queries resolve messy relative dates ("today", "tomorrow", day names like "Monday") dynamically against local time so demo data remains fresh across timezones and dates.
+
+### Decision 8: Cross-User Sharing Policy Engine & Single `authorize()` Choke Point (Feature B)
+- **Choice**: Centralized default-deny cross-user sharing engine (`mcp_server/sharing.py`) governed by a single `authorize(actor, owner, category, write)` choke point.
+- **Default-Deny Model**: Sharing is strictly OFF for all categories unless an enrolled owner explicitly grants access.
+- **Audience & Level Granularity**: Owners can grant `read` or `read_write` permissions to `all_enrolled` family members or a specific subset of user IDs.
+- **Tier 4 Absolute Protection**: Sensitive categories (Tier 4 Admin, Banking, Payments, Voice PINs, Device Settings) can **never** be shared across users; attempts to configure or authorize cross-user access fail unconditionally.
+- **Zero-Data-Leak Audit Logging**: Every cross-user access attempt—whether permitted or rejected—is logged to an append-only JSONL audit trail (`data/_sharing_audit.jsonl`), recording actor, owner, category, action, and decision reason.
+

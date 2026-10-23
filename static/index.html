@@ -636,6 +636,31 @@
   input:checked + .slider { background-color: var(--accent-blue); border-color: var(--accent-blue); }
   input:checked + .slider:before { transform: translateX(20px); background-color: #fff; }
   input:disabled + .slider { opacity: 0.5; cursor: not-allowed; }
+
+  /* Quick sample prompt chips */
+  .prompt-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  .prompt-chip {
+    padding: 6px 12px; border-radius: 20px; font-size: 0.76rem; font-weight: 500;
+    background: var(--bg-card2); border: 1px solid var(--border);
+    color: var(--accent-cyan); cursor: pointer; transition: all 0.2s; font-family: 'Inter', sans-serif;
+  }
+  .prompt-chip:hover {
+    background: rgba(34,211,238,0.15); border-color: var(--accent-cyan);
+    transform: translateY(-1px);
+  }
+
+  /* Sharing controls */
+  .sharing-select {
+    padding: 6px 10px; border-radius: 6px; background: var(--bg-card2);
+    border: 1px solid var(--border); color: var(--text-primary);
+    font-size: 0.8rem; outline: none; font-family: 'Inter', sans-serif;
+  }
+  .sharing-select:focus { border-color: var(--border-hi); }
+  .sharing-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+  .sharing-table th, .sharing-table td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+  .sharing-table th { color: var(--text-muted); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; }
+  .badge-allowed { color: var(--accent-green); font-weight: 600; }
+  .badge-denied { color: var(--accent-red); font-weight: 600; }
 </style>
 </head>
 <body>
@@ -651,6 +676,7 @@
     <nav>
       <button id="btn-assistant" class="nav-btn active" onclick="showTab('assistant')">🏠 Assistant</button>
       <button id="btn-enroll"    class="nav-btn" onclick="showTab('enroll')">👤 Enroll</button>
+      <button id="btn-sharing"   class="nav-btn" onclick="showTab('sharing')">🤝 Data Sharing</button>
       <button id="btn-access"    class="nav-btn" onclick="showTab('access')">🛡 Access Control</button>
       <button id="btn-audit"     class="nav-btn" onclick="showTab('audit')">📋 Audit Log</button>
     </nav>
@@ -737,6 +763,17 @@
         🔒 Liveness ON
       </span>
     </div>
+    <div class="card" style="margin-top:4px;">
+      <div class="card-label">⚡ Quick Demo Commands (Click to Test)</div>
+      <div class="prompt-chips">
+        <button class="prompt-chip" onclick="runSamplePrompt('What is on my schedule today?')">📅 My schedule today</button>
+        <button class="prompt-chip" onclick="runSamplePrompt('What is on Rahul\'s schedule today?')">👥 Rahul's schedule (Cross-user)</button>
+        <button class="prompt-chip" onclick="runSamplePrompt('What is on Priya\'s shopping list?')">🛒 Priya's shopping list</button>
+        <button class="prompt-chip" onclick="runSamplePrompt('Add almond milk to my shopping list')">📝 Add to my shopping list</button>
+        <button class="prompt-chip" onclick="runSamplePrompt('What is my next event?')">⏰ My next event</button>
+        <button class="prompt-chip" onclick="runSamplePrompt('What time is it now?')">🌐 Time (Tier 1 Guest)</button>
+      </div>
+    </div>
   </div><!-- /tab-assistant -->
 
   <!-- =================== ENROLLMENT PANEL =================== -->
@@ -810,6 +847,48 @@
       </div>
     </div>
   </div><!-- /tab-enroll -->
+
+  <!-- =================== SHARING & PRIVACY PANEL =================== -->
+  <div class="main-panel" id="tab-sharing" style="display:none;flex-direction:column;gap:16px;">
+    <div class="card">
+      <div class="panel-title" style="justify-content:space-between;">
+        <span>🤝 Cross-User Data Sharing & Privacy</span>
+        <button class="btn btn-sm" onclick="loadSharingTab()">↻ Refresh</button>
+      </div>
+      <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:16px;line-height:1.5;">
+        Configure fine-grained sharing policies between enrolled users. <strong>Default is OFF (deny)</strong>.
+        Tier 4 categories (Admin / Payments) are permanently non-shareable. All cross-user access attempts are cryptographically audited.
+      </p>
+
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;">
+        <label for="sharing-owner-select" style="font-size:0.82rem;color:var(--text-muted);font-weight:600;">Data Owner:</label>
+        <select id="sharing-owner-select" class="form-input" style="max-width:220px;" onchange="loadUserSharingPolicies()">
+          <option value="priya">Priya</option>
+          <option value="rahul">Rahul</option>
+          <option value="alice">Alice</option>
+        </select>
+        <span style="font-size:0.75rem;color:var(--text-dim);">Select which user's sharing permissions to configure</span>
+      </div>
+
+      <div class="access-grid" id="sharing-cards-grid">
+        <div style="color:var(--text-dim);font-size:0.85rem;">Loading sharing policies…</div>
+      </div>
+    </div>
+
+    <!-- Cross-User Sharing Audit Log -->
+    <div class="card">
+      <div class="panel-title" style="justify-content:space-between;">
+        <span>🔍 Cross-User Sharing Audit Trail</span>
+        <button class="btn btn-sm" onclick="loadSharingAudit()">↻ Refresh</button>
+      </div>
+      <p style="color:var(--text-muted);font-size:0.82rem;margin-bottom:12px;">
+        Immutable audit entries recording every attempt by one user to read or modify another user's personal data (allowed and denied).
+      </p>
+      <div id="sharing-audit-table" style="overflow-x:auto;">
+        <div style="color:var(--text-dim);font-size:0.85rem;">Loading audit trail…</div>
+      </div>
+    </div>
+  </div><!-- /tab-sharing -->
 
   <!-- =================== ACCESS CONTROL PANEL =================== -->
   <div class="main-panel" id="tab-access" style="display:none;flex-direction:column;gap:16px;">
@@ -909,13 +988,14 @@ let enrollName = '';
 // Tab management
 // ==========================================================
 function showTab(tab) {
-  ['assistant','enroll','access','audit'].forEach(t => {
+  ['assistant','enroll','sharing','access','audit'].forEach(t => {
     const el = document.getElementById('tab-'+t);
     if (el) el.style.display = (t === tab) ? 'flex' : 'none';
     const btn = document.getElementById('btn-'+t);
     if (btn) btn.classList.toggle('active', t === tab);
   });
   if (tab === 'enroll') loadUsers();
+  if (tab === 'sharing') loadSharingTab();
   if (tab === 'access') loadAccessControl();
   if (tab === 'audit')  loadAudit();
 }
@@ -1606,12 +1686,177 @@ function renderAudit(events) {
 }
 
 // ==========================================================
+// Quick Prompt Execution
+// ==========================================================
+async function runSamplePrompt(phrase) {
+  document.getElementById('transcript-input').value = phrase;
+  toast(`Testing prompt: "${phrase}"`);
+  await textAsk();
+}
+
+// ==========================================================
+// Sharing Management (Feature B)
+// ==========================================================
+const SHARING_CATEGORIES = [
+  { key: 'calendar_schedule', label: 'Calendar & Schedule', tier: 3, desc: 'Events, appointments, daily agenda' },
+  { key: 'shopping', label: 'Shopping & To-Do Lists', tier: 3, desc: 'Personal shopping list and named lists' },
+  { key: 'reminders', label: 'Personal Reminders', tier: 3, desc: 'Timed and context-based reminders' },
+  { key: 'routines', label: 'Personal Routines', tier: 3, desc: 'Custom sequences and automation steps' },
+  { key: 'payments_banking', label: 'Payments & Banking (Tier 4)', tier: 4, desc: 'Bank accounts, credit cards, checkout' },
+  { key: 'device_account_settings', label: 'Device & Account Settings (Tier 4)', tier: 4, desc: 'Voice PINs, biometric data, permissions' },
+];
+
+async function loadSharingTab() {
+  await populateSharingUserDropdown();
+  await loadUserSharingPolicies();
+  await loadSharingAudit();
+}
+
+async function populateSharingUserDropdown() {
+  try {
+    const r = await fetch('/api/users');
+    const d = await r.json();
+    const users = d.users || [];
+    const select = document.getElementById('sharing-owner-select');
+    if (!select) return;
+    const currentVal = select.value;
+    const demoUsers = ['priya', 'rahul', 'alice'];
+    const allUsers = Array.from(new Set([...users, ...demoUsers]));
+    select.innerHTML = allUsers.map(u => `<option value="${escHtml(u)}" ${u === currentVal ? 'selected' : ''}>${escHtml(u.replace(/_/g, ' ').toUpperCase())}</option>`).join('');
+  } catch(e) {}
+}
+
+async function loadUserSharingPolicies() {
+  const select = document.getElementById('sharing-owner-select');
+  const owner = (select ? select.value : 'priya') || 'priya';
+  const grid = document.getElementById('sharing-cards-grid');
+  if (!grid) return;
+
+  try {
+    const res = await fetch('/api/sharing?user=' + encodeURIComponent(owner));
+    const data = await res.json();
+    const policies = data.policies || {};
+
+    grid.innerHTML = SHARING_CATEGORIES.map(cat => {
+      const p = policies[cat.key] || { level: 'off', audience: 'all_enrolled' };
+      const isUnshareable = cat.tier === 4;
+      const currentLevel = isUnshareable ? 'off' : (p.level || 'off');
+      const currentAudience = Array.isArray(p.audience) ? p.audience.join(', ') : (p.audience || 'all_enrolled');
+
+      return `
+        <div class="access-card">
+          <div>
+            <div class="access-card-head">
+              <span class="access-card-title">${cat.label}</span>
+              <span class="access-card-tier tier-${cat.tier}">Tier ${cat.tier}</span>
+            </div>
+            <div class="access-card-desc">${cat.desc}</div>
+            ${isUnshareable ? '<div style="color:var(--accent-red);font-size:0.75rem;font-weight:600;margin-bottom:8px;">🔒 Strictly Unshareable (Tier 4)</div>' : ''}
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <span style="font-size:0.75rem;color:var(--text-muted);">Access Level:</span>
+              <select class="sharing-select" id="level-${cat.key}" ${isUnshareable ? 'disabled' : ''} onchange="saveSharingPolicy('${owner}', '${cat.key}')">
+                <option value="off" ${currentLevel === 'off' ? 'selected' : ''}>Off (Private)</option>
+                <option value="read" ${currentLevel === 'read' ? 'selected' : ''}>Read Only</option>
+                <option value="read_write" ${currentLevel === 'read_write' ? 'selected' : ''}>Read & Write</option>
+              </select>
+            </div>
+            ${!isUnshareable ? `
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
+              <span style="font-size:0.75rem;color:var(--text-muted);">Audience:</span>
+              <input type="text" id="audience-${cat.key}" class="form-input" style="padding:4px 8px;font-size:0.75rem;max-width:140px;"
+                value="${escHtml(currentAudience)}" placeholder="all_enrolled or user1,user2"
+                onchange="saveSharingPolicy('${owner}', '${cat.key}')">
+            </div>
+            ` : ''}
+          </div>
+        </div>
+      `;
+    }).join('');
+  } catch(e) {
+    grid.innerHTML = '<div style="color:var(--accent-red)">Error loading sharing policies: ' + e.message + '</div>';
+  }
+}
+
+async function saveSharingPolicy(owner, category) {
+  const levelEl = document.getElementById('level-' + category);
+  const audEl = document.getElementById('audience-' + category);
+  const level = levelEl ? levelEl.value : 'off';
+  const audience = audEl ? audEl.value.trim() : 'all_enrolled';
+
+  const fd = new FormData();
+  fd.append('owner', owner);
+  fd.append('category', category);
+  fd.append('level', level);
+  fd.append('audience', audience);
+
+  try {
+    const res = await fetch('/api/sharing', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (res.ok) {
+      toast(`✅ Updated sharing for ${category.replace(/_/g, ' ')} (${level})`);
+      loadSharingAudit();
+    } else {
+      toast(`Error: ${data.detail || 'Could not save'}`);
+    }
+  } catch(e) {
+    toast(`Network error: ${e.message}`);
+  }
+}
+
+async function loadSharingAudit() {
+  const container = document.getElementById('sharing-audit-table');
+  if (!container) return;
+  try {
+    const res = await fetch('/api/sharing/audit?n=20');
+    const data = await res.json();
+    const events = data.events || [];
+    if (!events.length) {
+      container.innerHTML = '<div style="color:var(--text-dim);font-size:0.85rem;">No cross-user access attempts recorded yet.</div>';
+      return;
+    }
+    container.innerHTML = `
+      <table class="sharing-table">
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Requester</th>
+            <th>Owner</th>
+            <th>Category</th>
+            <th>Action</th>
+            <th>Status</th>
+            <th>Reason</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${[...events].reverse().map(e => `
+            <tr>
+              <td style="color:var(--text-dim);font-size:0.72rem;">${new Date(e.ts).toLocaleTimeString()}</td>
+              <td><strong>${escHtml(e.actor)}</strong></td>
+              <td>${escHtml(e.owner)}</td>
+              <td><span class="policy-pill cat-pill" style="font-size:0.65rem;">${escHtml(e.category)}</span></td>
+              <td><span style="font-family:var(--mono);font-size:0.72rem;">${e.write ? 'WRITE' : 'READ'}</span></td>
+              <td><span class="${e.allowed ? 'badge-allowed' : 'badge-denied'}">${e.allowed ? 'ALLOWED' : 'DENIED'}</span></td>
+              <td style="color:var(--text-muted);font-size:0.75rem;">${escHtml(e.reason || '')}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+  } catch(e) {
+    container.innerHTML = '<div style="color:var(--text-dim);font-size:0.85rem;">Error loading sharing audit.</div>';
+  }
+}
+
+// ==========================================================
 // Init
 // ==========================================================
 window.addEventListener('DOMContentLoaded', () => {
   fetchChallenge();
   loadUsers();
   loadAccessControl();
+  loadSharingTab();
 });
 </script>
 </body>

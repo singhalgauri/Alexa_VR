@@ -85,9 +85,40 @@
 
 ---
 
-## Shot 6: Privacy Safeguards, Limitations, & Wrap-up
-- **Time:** `2:25 - 2:45` (20 seconds)
+## Shot 6: Feature A – Personalized Responses from Per-User Data
+- **Time:** `2:25 - 2:55` (30 seconds)
+- **Visual:** Web UI Assistant Tab. Enrolled demo users: Priya and Rahul.
+- **Action:**
+  1. Priya asks: *"What's on my schedule today?"*
+  2. Alexa+ responds with a personalized greeting: *"Good afternoon, Priya. You have 2 events today: 10:00 AM - Sprint Planning. 02:00 PM - 1:1 with Alex."*
+  3. Rahul speaks: *"What's on my schedule today?"*
+  4. Alexa+ responds to Rahul: *"Good afternoon, Rahul. You have 1 event today: 11:30 AM - Design Sync."*
+- **Narration (Spoken):**
+  > *"Because caller identity is bound to physical voice authentication, each enrolled household member receives strictly personalized answers from their own private data store. Priya and Rahul ask the exact same question, but hear only their own events and reminders."*
+
+---
+
+## Shot 7: Feature B – Cross-User Data Sharing & Default-Deny Choke Point
+- **Time:** `2:55 - 3:25` (30 seconds)
+- **Visual:** Web UI Assistant Tab + Data Sharing Tab.
+- **Action:**
+  1. Priya asks: *"What is on Rahul's schedule today?"*
+  2. Result: **Access Denied**. Alexa+ replies: *"Sorry Priya, Rahul hasn't shared their calendar schedule with you."*
+  3. Open the **Data Sharing Tab**:
+     - Switch owner to `Rahul`.
+     - Toggle `Calendar & Schedule` from `Off (Private)` to `Read Only` for `all_enrolled`.
+     - Notice Tier 4 (Payments / Banking) is locked as permanently unshareable!
+  4. Priya asks again: *"What is on Rahul's schedule today?"*
+  5. Result: **Access Granted**. Alexa+ replies: *"Rahul's schedule today: 1 event. 11:30 AM - Design Sync."*
+  6. Switch to the **Cross-User Sharing Audit Trail** in the UI, showing both the blocked attempt and the allowed attempt with exact reasons and timestamps.
+- **Narration (Spoken):**
+  > *"Cross-user access follows a strict default-deny model governed by a single authorize() choke point. When Priya asks about Rahul's calendar, she is politely blocked. But Rahul can grant granular read or write permissions to family members through the Data Sharing controls. As soon as he shares it, Priya can check his schedule, and every single cross-user interaction is recorded in the immutable audit trail."*
+
+---
+
+## Shot 8: Privacy Safeguards, Limitations, & Wrap-up
+- **Time:** `3:25 - 3:45` (20 seconds)
 - **Visual:** Return to web UI audit log and README summary.
 - **Action:** Highlight the live audit log showing timestamps and scores with zero audio saved, and the 1-click "Delete" button for voiceprints.
 - **Narration (Spoken):**
-  > *"Privacy is baked into the design: raw audio is never saved to disk, voiceprints can be deleted instantly, and the full test suite runs 100% offline. Voice Gate brings zero-trust security to Alexa+ and the MCP ecosystem. Thank you!"*
+  > *"Privacy is baked into the design: raw audio is never saved to disk, voiceprints can be deleted instantly, and the full test suite runs 100% offline. Voice Gate brings zero-trust security and fine-grained privacy controls to Alexa+ and the MCP ecosystem. Thank you!"*

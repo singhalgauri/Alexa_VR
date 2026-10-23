@@ -412,6 +412,62 @@ async def update_guest_permission(
 
 
 # ---------------------------------------------------------------------------
+# Cross-User Sharing Policy endpoints (Feature B)
+# ---------------------------------------------------------------------------
+
+from mcp_server.sharing import (  # noqa: E402
+    get_all_sharing_policies,
+    get_sharing_policy,
+    set_sharing,
+    recent_sharing_audit,
+)
+
+
+@app.get("/api/sharing")
+async def get_sharing(user: str = ""):
+    """Return sharing policy for a specific user, or all policies."""
+    if user:
+        return {"owner": user.lower(), "policies": get_sharing_policy(user)}
+    return {"policies": get_all_sharing_policies()}
+
+
+@app.post("/api/sharing")
+async def update_sharing(
+    owner: str = Form(...),
+    category: str = Form(...),
+    level: str = Form(default="off"),
+    audience: str = Form(default="all_enrolled"),
+):
+    """
+    Set sharing policy for owner/category.
+    level: "off" | "read" | "read_write"
+    audience: "all_enrolled" | comma-separated user names
+    """
+    aud: str | list[str] = audience.strip()
+    if "," in aud:
+        aud = [u.strip() for u in aud.split(",") if u.strip()]
+    elif aud not in ("all_enrolled", ""):
+        aud = [aud]
+    if not aud:
+        aud = "all_enrolled"
+
+    success, msg = set_sharing(owner=owner, category=category, level=level, audience=aud)
+    if not success:
+        raise HTTPException(400, msg)
+    return {
+        "status": "updated",
+        "message": msg,
+        "policy": get_sharing_policy(owner),
+    }
+
+
+@app.get("/api/sharing/audit")
+async def sharing_audit_log(n: int = 20):
+    """Return recent cross-user sharing audit events."""
+    return {"events": recent_sharing_audit(min(n, 100))}
+
+
+# ---------------------------------------------------------------------------
 # Audit log
 # ---------------------------------------------------------------------------
 

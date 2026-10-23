@@ -26,12 +26,22 @@ We built **Voice Gate for Alexa+** to bring true zero-trust biometric security t
    - Runs on port 8765 using the official MCP Python SDK (`mcp==2.3.0`) over Streamable HTTP (spec version `2025-11-25` or later).
    - An ASGI security middleware validates the Bearer token on every tool call and injects the verified identity into a secure `ContextVar`.
    - Identity is **never** accepted as an LLM argument, eliminating prompt injection and identity tampering.
-   - 8 per-user tools: `get_time`, `add_reminder`, `list_reminders`, `add_to_list`, `read_list`, `set_timer`, `control_device`, `get_weather_stub`.
-4. **Rich Alexa-Inspired Visual Interface**:
+   - Comprehensive suite of 17 per-user tools across schedules, reminders, shopping lists, device controls, and sharing controls.
+4. **Feature A: Personalized Responses from Per-User Data**:
+   - Isolated JSON stores for each enrolled household member (`data/<user>.json`).
+   - Dynamic relative date parsing ("today", "tomorrow", day names) keeps agendas fresh.
+   - Time-of-day greetings and personalized prefixes tailored to the authenticated speaker.
+5. **Feature B: Fine-Grained Cross-User Sharing & Default-Deny Choke Point**:
+   - Default-deny architecture governed by a single `authorize()` choke point.
+   - Granular sharing levels (`off`, `read`, `read_write`) and audience targeting (`all_enrolled` or specific family members).
+   - Absolute protection of Tier 4 categories (Payments, Banking, PINs, Admin Settings) which are permanently unshareable.
+   - Immutable cross-user audit log (`/api/sharing/audit`) recording all access attempts with zero data leakage.
+6. **Rich Alexa-Inspired Visual Interface**:
    - Dark-mode responsive UI with a pulsating listening orb (Idle, Listening, Verifying, Granted, Denied states).
+   - Dedicated **Data Sharing & Privacy Controls** tab to view/toggle permissions in real time.
    - Real-time MCP activity stream showing tool name, input arguments, execution result, and millisecond latency.
    - Guided enrollment workflow with biometric consent disclosure and deletion controls.
-   - Live audit logging feed tracking authentication attempts and similarity scores without exposing raw queries.
+   - Live audit logging feeds tracking authentication attempts and cross-user data accesses.
 
 ---
 

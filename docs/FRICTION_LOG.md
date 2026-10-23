@@ -85,3 +85,17 @@ Because the platform does not inject authenticated speaker identity metadata int
    - Zero risk of LLM prompt injection overriding user identity.
    - Per-speaker data compartmentalization for reminders, shopping lists, and media preferences.
    - Safe execution of sensitive smart-home actions in multi-occupant homes.
+
+---
+
+## 3. Second Feature Request: Standardized Multi-User Sharing Protocol in MCP
+
+> **Status:** ENHANCEMENT  
+> **Target:** Model Context Protocol (MCP) Working Group  
+> **Feature Request:** **Standardized Resource / Tool Sharing Semantics for Multi-User Environments**
+
+### Background
+In household settings, users frequently want to share specific resources (e.g., family calendar, joint grocery list) while keeping others strictly private (e.g., personal appointments, medication reminders). Currently, MCP provides no standardized semantics for cross-user resource delegation, audience scoping, or sharing levels.
+
+### Proposed Solution
+Adopt a standardized permission descriptor schema in MCP resource definitions allowing tools to declare shareability tiers and support delegated authorization tokens, enabling interoperable family/team sharing across diverse MCP servers.

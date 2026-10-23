@@ -3,7 +3,7 @@
     "emergency": true,
     "music_entertainment": true,
     "general_info": true,
-    "smart_home": true,
+    "smart_home": false,
     "video_tv": false,
     "generic_timers": false,
     "third_party_skills": false,
@@ -19,9 +19,9 @@
     "personal_data": false
   },
   "third_party_allowlist": [
-    "calm_meditation",
     "daily_quote",
-    "trivia_time"
+    "trivia_time",
+    "calm_meditation"
   ],
   "user_pins": {
     "gauravi": "1234",
@@ -29,11 +29,11 @@
     "alice": "9999"
   },
   "enrolled_users": [
-    "john",
     "gauravi",
-    "p",
+    "alice",
     "G",
-    "alice"
+    "p",
+    "john"
   ],
   "threshold_normal": 0.4,
   "threshold_high": 0.65,

@@ -8,6 +8,15 @@ from mcp_server.auth import current_user
 from mcp_server import tools
 
 
+@pytest.fixture(autouse=True)
+def clean_test_data(tmp_path, monkeypatch):
+    """Isolate data directory to a clean temporary path for each test."""
+    data_dir = tmp_path / "test_data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("VOICEGATE_USER_DATA_DIR", str(data_dir))
+    monkeypatch.setattr("mcp_server.user_data.DATA_DIR", data_dir)
+
+
 def test_tool_requires_authenticated_context():
     """Tools must raise RuntimeError if called without authenticated context."""
     token = current_user.set("")
