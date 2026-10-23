@@ -7,7 +7,7 @@
     "video_tv": false,
     "generic_timers": false,
     "third_party_skills": false,
-    "communication": false,
+    "communication": true,
     "home_security": false,
     "shopping": false,
     "routines": false,
@@ -29,11 +29,11 @@
     "alice": "9999"
   },
   "enrolled_users": [
+    "john",
+    "gauravi",
     "p",
     "G",
-    "john",
-    "alice",
-    "gauravi"
+    "alice"
   ],
   "threshold_normal": 0.4,
   "threshold_high": 0.65,

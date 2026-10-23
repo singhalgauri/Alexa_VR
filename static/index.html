@@ -774,6 +774,28 @@
           <button class="btn btn-primary" id="enroll-record-btn" onclick="recordEnrollClip()">
             ⏺ Record clip
           </button>
+          <!-- PIN section — shown only after all clips are recorded -->
+          <div id="enroll-pin-section" style="display:none;width:100%;">
+            <div style="margin:14px 0 6px;color:var(--text-muted);font-size:0.82rem;line-height:1.5;">
+              🔐 <strong>Set your security PIN</strong> — this 4–8 digit PIN is used as a
+              second factor for sensitive requests (Tier 3/4) and to authorise guest permission changes.
+            </div>
+            <div class="form-row" style="gap:12px;">
+              <div class="form-field" style="flex:1;">
+                <div class="form-label">Voice PIN (4–8 digits)</div>
+                <input class="form-input" type="password" id="enroll-pin"
+                       placeholder="e.g. 1234" maxlength="8" inputmode="numeric"
+                       pattern="[0-9]{4,8}" autocomplete="new-password">
+              </div>
+              <div class="form-field" style="flex:1;">
+                <div class="form-label">Confirm PIN</div>
+                <input class="form-input" type="password" id="enroll-pin-confirm"
+                       placeholder="Repeat PIN" maxlength="8" inputmode="numeric"
+                       pattern="[0-9]{4,8}" autocomplete="new-password">
+              </div>
+            </div>
+            <div id="enroll-pin-hint" style="font-size:0.78rem;color:var(--text-dim);margin-top:4px;"></div>
+          </div>
           <button class="btn btn-danger" id="enroll-submit-btn" onclick="submitEnrollment()" style="display:none;">
             ✅ Submit enrollment
           </button>
@@ -1414,10 +1436,15 @@ function updateEnrollUI() {
   if (enrollStep < 4) {
     phraseEl.textContent = '"' + phrases[enrollStep] + '"';
     document.getElementById('enroll-record-btn').style.display = 'flex';
+    document.getElementById('enroll-pin-section').style.display = 'none';
+    document.getElementById('enroll-submit-btn').style.display = 'none';
   } else {
-    phraseEl.textContent = 'All clips recorded! Submit to finish.';
+    phraseEl.textContent = 'All clips recorded! Set your PIN and submit.';
     document.getElementById('enroll-record-btn').style.display = 'none';
+    document.getElementById('enroll-pin-section').style.display = 'block';
     document.getElementById('enroll-submit-btn').style.display = 'flex';
+    // Focus PIN field
+    setTimeout(() => document.getElementById('enroll-pin').focus(), 80);
   }
 }
 
@@ -1446,12 +1473,39 @@ async function recordEnrollClip() {
 
 async function submitEnrollment() {
   if (enrollClips.length < 3) { toast('Need at least 3 clips'); return; }
+
+  // --- PIN validation ---
+  const pinVal     = document.getElementById('enroll-pin').value.trim();
+  const pinConfirm = document.getElementById('enroll-pin-confirm').value.trim();
+  const hintEl     = document.getElementById('enroll-pin-hint');
+
+  if (!pinVal) {
+    hintEl.style.color = 'var(--danger)';
+    hintEl.textContent = '⚠ PIN is required (4–8 digits).';
+    document.getElementById('enroll-pin').focus();
+    return;
+  }
+  if (!/^[0-9]{4,8}$/.test(pinVal)) {
+    hintEl.style.color = 'var(--danger)';
+    hintEl.textContent = '⚠ PIN must be 4–8 digits (numbers only).';
+    document.getElementById('enroll-pin').focus();
+    return;
+  }
+  if (pinVal !== pinConfirm) {
+    hintEl.style.color = 'var(--danger)';
+    hintEl.textContent = '⚠ PINs do not match — please re-enter.';
+    document.getElementById('enroll-pin-confirm').focus();
+    return;
+  }
+  hintEl.textContent = '';
+
   const btn = document.getElementById('enroll-submit-btn');
   btn.textContent = '⏳ Enrolling…'; btn.disabled = true;
 
   const fd = new FormData();
   fd.append('name', enrollName);
   fd.append('consent', 'true');
+  fd.append('pin', pinVal);
   enrollClips.forEach((blob, i) => fd.append('clips', blob, `clip${i}.wav`));
 
   try {
@@ -1464,8 +1518,10 @@ async function submitEnrollment() {
       d = { detail: text || ('HTTP ' + r.status) };
     }
     if (r.ok) {
-      toast(`✅ ${enrollName} enrolled with ${d.clips} clips!`);
+      toast(`✅ ${enrollName} enrolled with ${d.clips} clips! ${d.pin_status || ''}`);
       document.getElementById('enroll-flow').style.display = 'none';
+      document.getElementById('enroll-pin').value = '';
+      document.getElementById('enroll-pin-confirm').value = '';
       enrollClips = []; enrollStep = 0;
       loadUsers();
     } else {
