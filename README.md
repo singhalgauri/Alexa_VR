@@ -148,18 +148,20 @@ All options are configurable via environment variables or a `.env` file:
 
 ## 6. MCP Server & Tool Isolation
 
-The self-hosted MCP server exposes 8 speakable, per-user tools on `http://127.0.0.1:8765/mcp`:
-- `get_time()`: Current UTC time.
-- `add_reminder(text)`: Adds a reminder for the authenticated user.
-- `list_reminders()`: Lists reminders saved exclusively by the caller.
-- `add_to_list(list_name, item)`: Appends an item to a named list.
-- `read_list(list_name)`: Reads items from the user's named list.
-- `set_timer(minutes, label)`: Sets a countdown timer.
-- `control_device(device, state)`: Controls simulated smart-home devices (`living room light`, `bedroom light`, `thermostat`).
-- `get_weather_stub(city)`: Returns simulated weather forecasts clearly marked `[SIMULATED]`.
+The self-hosted MCP server exposes 17 speakable, per-user tools on `http://127.0.0.1:8765/mcp`:
+- **Personal Schedule (Feature A)**: `get_schedule(day, owner)`, `get_next_event(owner)`, `add_event(title, when, time_str, owner)`.
+- **Personalized Greetings**: `greeting()` returning time-of-day greeting addressed to verified speaker.
+- **Reminders & Lists**: `add_reminder`, `list_reminders`, `add_to_shopping_list`, `read_shopping_list`, `add_to_list`, `read_list`.
+- **Routines & Automations**: `run_routine(routine_name)`.
+- **Smart Home & Devices**: `control_device`, `set_timer`, `get_time`, `get_weather_stub`.
+- **Cross-User Sharing Controls (Feature B)**: `set_sharing_policy(category, level, audience)`, `get_sharing_policies()`, `revoke_sharing_policy(category)`.
 
-### Zero-Trust User Isolation
-MCP tools **never accept the username as an argument**. The caller identity is derived strictly from the verified Bearer token by `BearerTokenMiddleware` and injected into `contextvars.ContextVar("current_user")`. Bob cannot access Alice's reminders even if prompted by an adversarial LLM injection.
+### Zero-Trust User Isolation & Default-Deny Sharing
+1. **ContextVar Caller Identity**: MCP tools **never accept the caller username as a client argument**. The caller identity is derived strictly from the verified Bearer token by `BearerTokenMiddleware` and injected into `contextvars.ContextVar("current_user")`.
+2. **Centralized `authorize()` Choke Point**: Any tool call referencing another user's data (e.g. `get_schedule(owner="rahul")`) routes strictly through `mcp_server.sharing.authorize()`.
+3. **Default-Deny Model**: Sharing is strictly OFF for all categories unless an enrolled owner explicitly grants `read` or `read_write` access.
+4. **Tier 4 Unshareable Protection**: Categories such as banking, payments, and account PINs can never be shared across users under any circumstance.
+5. **Cross-User Audit Trail**: Every cross-user access attempt (allowed or denied) is immutably logged to `data/_sharing_audit.jsonl` and viewable in the UI or via `/api/sharing/audit`.
 
 ---
 
@@ -173,11 +175,13 @@ pytest -v
 ```
 
 ### Verified Test Categories:
+- **`tests/test_sharing.py`**: Per-user personal schedule isolation, default-deny sharing, audience filtering, read-only vs read-write protection, Tier 4 unshareable enforcement, cross-user audit trail, and `/api/sharing` REST endpoints.
 - **`tests/test_voice_gate.py`**: Enrollment clip validation ($\ge 3$), name regex, cosine threshold verification, multi-speaker selection, short-clip rejection.
 - **`tests/test_tokens.py`**: HMAC-SHA256 minting, signature verification, tampering detection, and 60-second expiration.
-- **`tests/test_tools_isolation.py`**: Per-user data partitioning across all 8 tools; unauthenticated execution rejection.
+- **`tests/test_tools_isolation.py`**: Per-user data partitioning across tools; unauthenticated execution rejection.
 - **`tests/test_mcp_auth_and_protocol.py`**: MCP server 401 rejections on missing/expired tokens; Streamable HTTP protocol negotiation $\ge 2025-11-25$.
 - **`tests/test_api_server.py`**: End-to-end FastAPI integration verifying unknown voices **never reach the MCP server**, sliding-window brute-force rate limiting, and audit logging.
+- **`tests/test_access_control.py`**: Tier 0 to Tier 4 sensitivity mapping, voice PIN verification, and guest permissions.
 
 ---
 

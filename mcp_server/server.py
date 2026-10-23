@@ -49,16 +49,60 @@ def get_time() -> str:
 
 
 @mcp.tool()
+def greeting() -> str:
+    """Return a personalized greeting for the verified user."""
+    return tools.greeting()
+
+
+# --- Schedule / Calendar tools ---
+
+@mcp.tool()
+def get_schedule(day: str = "", owner: str = "") -> str:
+    """Get schedule events for a day (YYYY-MM-DD, default today). owner: optional other user's name."""
+    return tools.get_schedule(day, owner)
+
+
+@mcp.tool()
+def get_next_event(owner: str = "") -> str:
+    """Get the next upcoming calendar event. owner: optional other user's name."""
+    return tools.get_next_event(owner)
+
+
+@mcp.tool()
+def add_event(title: str, when: str, time_str: str = "") -> str:
+    """Add a calendar event. title: event name. when: YYYY-MM-DD. time_str: HH:MM (optional)."""
+    return tools.add_event(title, when, time_str)
+
+
+# --- Reminder tools ---
+
+@mcp.tool()
 def add_reminder(text: str) -> str:
     """Add a reminder. text: what to remember."""
     return tools.add_reminder(text)
 
 
 @mcp.tool()
-def list_reminders() -> str:
-    """List your saved reminders."""
-    return tools.list_reminders()
+def list_reminders(owner: str = "") -> str:
+    """List your saved reminders. owner: optional other user's name."""
+    return tools.list_reminders(owner)
 
+
+# --- Shopping list tools ---
+
+@mcp.tool()
+def add_to_shopping_list(item: str) -> str:
+    """Add an item to the shopping list."""
+    return tools.add_to_shopping_list(item)
+
+
+@mcp.tool()
+def read_shopping_list(owner: str = "") -> str:
+    """Read the shopping list. owner: optional other user's name."""
+    return tools.read_shopping_list(owner)
+
+
+# --- Named list tools ---
 
 @mcp.tool()
 def add_to_list(list_name: str, item: str) -> str:
@@ -67,10 +111,12 @@ def add_to_list(list_name: str, item: str) -> str:
 
 
 @mcp.tool()
-def read_list(list_name: str) -> str:
-    """Read items from a named list."""
-    return tools.read_list(list_name)
+def read_list(list_name: str, owner: str = "") -> str:
+    """Read items from a named list. owner: optional other user's name."""
+    return tools.read_list(list_name, owner)
 
+
+# --- Timer and device tools ---
 
 @mcp.tool()
 def set_timer(minutes: float, label: str = "timer") -> str:
@@ -88,6 +134,20 @@ def control_device(device: str, state: str) -> str:
 def get_weather_stub(city: str) -> str:
     """Get simulated weather for a city (clearly labeled simulated)."""
     return tools.get_weather_stub(city)
+
+
+# --- Sharing management tools ---
+
+@mcp.tool()
+def get_my_sharing() -> str:
+    """View your current data sharing settings."""
+    return tools.get_my_sharing()
+
+
+@mcp.tool()
+def set_my_sharing(category: str, level: str, audience: str = "all_enrolled") -> str:
+    """Update your sharing settings for a category. level: off/read/read_write. audience: all_enrolled or comma-separated usernames."""
+    return tools.set_my_sharing(category, level, audience)
 
 
 # ---------------------------------------------------------------------------
